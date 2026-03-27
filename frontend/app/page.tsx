@@ -10,7 +10,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <div>
             <h1 className="text-xl font-semibold tracking-tight">RNAPeaks</h1>
             <p className="text-sm text-muted-foreground">
@@ -21,14 +21,14 @@ export default function Home() {
             href="https://github.com/Krushna-B/RNAPeaks"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            className="text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             Docs →
           </a>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-8">
+      <main className="mx-auto max-w-7xl px-6 py-8">
         <Tabs defaultValue="plot-gene">
           <TabsList className="mb-6">
             <TabsTrigger value="plot-gene">Plot Gene</TabsTrigger>
