@@ -1,7 +1,6 @@
 library(RNAPeaks)
 library(ggplot2)
 
-# Load GTF once at startup - shared across all requests
 message("Loading GTF annotation...")
 gtf <- tryCatch(
   LoadGTF(species = "Human"),
@@ -12,9 +11,27 @@ gtf <- tryCatch(
 )
 message("GTF ready.")
 
+
+# Helpers
+assemble_chunks <- function(upload_id) {
+  chunk_dir <- file.path("/tmp/uploads", upload_id)
+  if (!dir.exists(chunk_dir)) stop("Upload not found: ", upload_id)
+  chunk_files <- sort(list.files(chunk_dir, full.names = TRUE))
+  if (length(chunk_files) == 0) stop("No chunks found for: ", upload_id)
+  final_path <- tempfile()
+  out_con <- file(final_path, "wb")
+  tryCatch(
+    for (cf in chunk_files) writeBin(readBin(cf, "raw", n = file.info(cf)$size), out_con),
+    finally = close(out_con)
+  )
+  unlink(chunk_dir, recursive = TRUE)
+  final_path
+}
+
+# CORS
 #* @filter cors
 function(req, res) {
-  ## TODO: Change to only all proper CORS res$setHeader("Access-Control-Allow-Origin", "*")
+  res$setHeader("Access-Control-Allow-Origin", "*")
   res$setHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
   res$setHeader("Access-Control-Allow-Headers", "Content-Type")
   if (req$REQUEST_METHOD == "OPTIONS") {
@@ -24,126 +41,90 @@ function(req, res) {
   plumber::forward()
 }
 
-#* Health check
+# Health
 #* @get /health
-function() {
-  list(status = "ok", gtf_loaded = !is.null(gtf))
+function() list(status = "ok", gtf_loaded = !is.null(gtf))
+
+# Chunk Upload
+#* @post /upload/chunk
+#* @parser multi
+function(upload_id, chunk_index, total_chunks, chunk) {
+  chunk_dir <- file.path("/tmp/uploads", upload_id)
+  dir.create(chunk_dir, recursive = TRUE, showWarnings = FALSE)
+  chunk_path <- file.path(chunk_dir, sprintf("chunk_%06d", as.integer(chunk_index)))
+  writeBin(chunk[[1]]$value, chunk_path)
+  list(status = "ok", received = as.integer(chunk_index), total = as.integer(total_chunks))
 }
 
-#* Plot RBP peaks on a single gene
+# Analysis endpoints
 #* @post /plot-gene
-#* @parser multi
 #* @serializer png list(width = 1600, height = 1200, res = 150)
-function(req, bed_file, geneID, species = "Human", peak_col = "purple",
-         order_by = "Count", five_to_three = FALSE) {
-  tmp <- tempfile(fileext = ".bed")
-  on.exit(unlink(tmp))
-
-  writeBin(bed_file[[1]]$value, tmp)
-
-  bed <- utils::read.table(tmp, header = FALSE, sep = "\t")
+function(upload_id, geneID, species = "Human", peak_col = "purple",
+         order_by = "Count", five_to_three = "FALSE") {
+  path <- assemble_chunks(upload_id)
+  on.exit(unlink(path))
+  bed <- utils::read.table(path, header = FALSE, sep = "\t")
   bed <- checkBed(bed)
-
   result <- PlotGene(
-    bed = bed,
-    geneID = geneID,
-    gtf = gtf,
-    species = species,
-    peak_col = peak_col,
-    order_by = order_by,
+    bed = bed, geneID = geneID, gtf = gtf, species = species,
+    peak_col = peak_col, order_by = order_by,
     five_to_three = as.logical(five_to_three),
-    RNA_Peaks_File_Path = NULL,
-    Bed_File_Path = NULL
+    RNA_Peaks_File_Path = NULL, Bed_File_Path = NULL
   )
-
   print(result$plot)
 }
 
-#* Plot RBP peaks across a genomic region
 #* @post /plot-region
-#* @parser multi
 #* @serializer png list(width = 1600, height = 1200, res = 150)
-function(req, bed_file, Chr, Start, End, Strand, peak_col = "blue",
-         order_by = "Count") {
-  tmp <- tempfile(fileext = ".bed")
-  on.exit(unlink(tmp))
-
-  writeBin(bed_file[[1]]$value, tmp)
-
-  bed <- utils::read.table(tmp, header = FALSE, sep = "\t")
+function(upload_id, Chr, Start, End, Strand, peak_col = "blue", order_by = "Count") {
+  path <- assemble_chunks(upload_id)
+  on.exit(unlink(path))
+  bed <- utils::read.table(path, header = FALSE, sep = "\t")
   bed <- checkBed(bed)
-
   result <- PlotRegion(
-    bed = bed,
-    gtf = gtf,
-    Chr = Chr,
-    Start = as.integer(Start),
-    End = as.integer(End),
-    Strand = Strand,
-    peak_col = peak_col,
-    order_by = order_by,
-    RNA_Peaks_File_Path = NULL,
-    Bed_File_Path = NULL
+    bed = bed, gtf = gtf, Chr = Chr,
+    Start = as.integer(Start), End = as.integer(End),
+    Strand = Strand, peak_col = peak_col, order_by = order_by,
+    RNA_Peaks_File_Path = NULL, Bed_File_Path = NULL
   )
-
   print(result$plot)
 }
 
-#* Compute RBP binding frequency around splice junctions
 #* @post /splicing-map
-#* @parser multi
 #* @serializer png list(width = 1400, height = 900, res = 150)
-function(req, bed_file, semats_file,
-         WidthIntoExon = 50, WidthIntoIntron = 300,
-         moving_average = 50, cores = 1) {
-  tmp_bed <- tempfile(fileext = ".bed")
-  tmp_mats <- tempfile(fileext = ".txt")
+function(bed_upload_id, mats_upload_id,
+         WidthIntoExon = "50", WidthIntoIntron = "300", moving_average = "50") {
+  bed_path <- assemble_chunks(bed_upload_id)
+  mats_path <- assemble_chunks(mats_upload_id)
   on.exit({
-    unlink(tmp_bed)
-    unlink(tmp_mats)
+    unlink(bed_path)
+    unlink(mats_path)
   })
-
-  writeBin(bed_file[[1]]$value, tmp_bed)
-  writeBin(semats_file[[1]]$value, tmp_mats)
-
-  bed <- utils::read.table(tmp_bed, header = FALSE, sep = "\t")
-  mats <- utils::read.table(tmp_mats, header = TRUE, sep = "\t")
-
+  bed <- utils::read.table(bed_path, header = FALSE, sep = "\t")
+  mats <- utils::read.table(mats_path, header = TRUE, sep = "\t")
   plot <- createSplicingMap(
-    bed_file = bed,
-    SEMATS = mats,
+    bed_file = bed, SEMATS = mats,
     WidthIntoExon = as.integer(WidthIntoExon),
     WidthIntoIntron = as.integer(WidthIntoIntron),
     moving_average = as.integer(moving_average),
-    cores = as.integer(cores),
     verbose = FALSE
   )
-
   print(plot)
 }
 
-#* Compute sequence motif enrichment around splice junctions
 #* @post /sequence-map
-#* @parser multi
 #* @serializer png list(width = 1400, height = 900, res = 150)
-function(req, semats_file, sequence,
-         WidthIntoExon = 50, WidthIntoIntron = 250,
-         moving_average = 40) {
-  tmp <- tempfile(fileext = ".txt")
-  on.exit(unlink(tmp))
-
-  writeBin(semats_file[[1]]$value, tmp)
-
-  mats <- utils::read.table(tmp, header = TRUE, sep = "\t")
-
+function(mats_upload_id, sequence,
+         WidthIntoExon = "50", WidthIntoIntron = "250", moving_average = "40") {
+  path <- assemble_chunks(mats_upload_id)
+  on.exit(unlink(path))
+  mats <- utils::read.table(path, header = TRUE, sep = "\t")
   plot <- createSequenceMap(
-    SEMATS          = mats,
-    sequence        = sequence,
-    WidthIntoExon   = as.integer(WidthIntoExon),
+    SEMATS = mats, sequence = sequence,
+    WidthIntoExon = as.integer(WidthIntoExon),
     WidthIntoIntron = as.integer(WidthIntoIntron),
-    moving_average  = as.integer(moving_average),
-    verbose         = FALSE
+    moving_average = as.integer(moving_average),
+    verbose = FALSE
   )
-
   print(plot)
 }

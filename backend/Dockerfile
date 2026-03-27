@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y \
   libtiff5-dev \
   libjpeg-dev \
   libgit2-dev \
+  libsodium-dev \
   && rm -rf /var/lib/apt/lists/*
 
 # Install BiocManager + core dependencies
@@ -24,7 +25,7 @@ RUN R -e "install.packages('remotes', repos='https://cloud.r-project.org')"
 RUN R -e "remotes::install_github('Krushna-B/RNAPeaks', dependencies=TRUE)"
 
 # Install plumber
-RUN R -e "install.packages('plumber', repos='https://cloud.r-project.org')"
+RUN R -e "install.packages('plumber'); library(plumber)"
 
 COPY plumber.R /app/plumber.R
 
