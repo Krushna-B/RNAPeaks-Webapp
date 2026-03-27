@@ -1,0 +1,27 @@
+name: Deploy Backend to HF Space
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+
+jobs:
+  deploy:
+    name: Push to Hugging Face
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push backend to HF Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git config user.email "ci@github"
+          git config user.name "GitHub Actions"
+          git remote add hf https://Excyte:$HF_TOKEN@huggingface.co/spaces/Excyte/rna-peaks-backend
+          git subtree push --prefix=backend hf main

@@ -1,6 +1,6 @@
 # RNAPeaks Webapp
 
-A web application for the Dominguez Lab's RNAPeaks pipeline — enabling researchers to analyze RNA peak data through an intuitive interface.
+A web application for the RNAPeaks Package
 
 ## Structure
 
