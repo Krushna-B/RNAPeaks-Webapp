@@ -1,4 +1,3 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:7860"
 const CHUNK_SIZE = 10 * 1024 * 1024 // 10 MB
 
 export function generateUploadId(): string {
@@ -23,7 +22,7 @@ export async function uploadFileInChunks(
     form.append("total_chunks", String(totalChunks))
     form.append("chunk", chunk, file.name)
 
-    const res = await fetch(`${API_URL}/upload/chunk`, {
+    const res = await fetch(`/api/upload/chunk`, {
       method: "POST",
       body: form,
     })

@@ -1,5 +1,3 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:7860"
-
 async function fetchPlot(
   endpoint: string,
   params: Record<string, string>
@@ -7,7 +5,7 @@ async function fetchPlot(
   const form = new FormData()
   Object.entries(params).forEach(([k, v]) => form.append(k, v))
 
-  const res = await fetch(`${API_URL}/${endpoint}`, {
+  const res = await fetch(`/api/${endpoint}`, {
     method: "POST",
     body: form,
   })
