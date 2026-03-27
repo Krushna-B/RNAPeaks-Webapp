@@ -24,4 +24,4 @@ jobs:
           git config user.email "ci@github"
           git config user.name "GitHub Actions"
           git remote add hf https://Excyte:$HF_TOKEN@huggingface.co/spaces/Excyte/rna-peaks-backend
-          git subtree push --prefix=backend hf main
+          git subtree push --prefix=backend hf_space main

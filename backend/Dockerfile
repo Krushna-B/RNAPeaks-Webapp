@@ -21,8 +21,7 @@ RUN R -e "install.packages('BiocManager', repos='https://cloud.r-project.org')"
 RUN R -e "BiocManager::install(c('GenomicRanges', 'AnnotationHub', 'BiocFileCache'), ask=FALSE)"
 
 # Install RNAPeaks from GitHub (pulls all CRAN/Bioc deps automatically)
-RUN R -e "install.packages('remotes', repos='https://cloud.r-project.org')"
-RUN R -e "remotes::install_github('Krushna-B/RNAPeaks', dependencies=TRUE)"
+RUN R -e "install.packages('remotes', repos='https://cloud.r-project.org'); remotes::install_github('Krushna-B/RNAPeaks', dependencies=TRUE)"
 
 # Install plumber
 RUN R -e "install.packages('plumber'); library(plumber)"
