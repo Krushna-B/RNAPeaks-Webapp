@@ -30,8 +30,11 @@ RUN R -e " \
   if (!requireNamespace('RNAPeaks', quietly=TRUE)) stop('RNAPeaks installation failed') \
   "
 
-# Install plumber
-RUN R -e "install.packages('plumber'); library(plumber)"
+# Install BSgenome at build time (not runtime)
+RUN R -e "BiocManager::install('BSgenome.Hsapiens.UCSC.hg38', ask=FALSE)"
+
+# Install plumber last so upgrade='always' in RNAPeaks install cannot downgrade it
+RUN R -e "install.packages('plumber', repos='https://cloud.r-project.org'); library(plumber)"
 
 COPY plumber.R /app/plumber.R
 

@@ -15,9 +15,6 @@ gtf <- tryCatch(
 )
 log_info("GTF ready. gtf_loaded=", !is.null(gtf))
 
-log_info("Installing Genome...")
-BiocManager::install("BSgenome.Hsapiens.UCSC.hg38")
-
 # Helpers
 get_upload_path <- function(upload_id) {
   if (is.null(upload_id) || nchar(trimws(upload_id)) == 0) {
