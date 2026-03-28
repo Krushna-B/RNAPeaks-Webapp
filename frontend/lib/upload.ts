@@ -1,36 +1,44 @@
-const CHUNK_SIZE = 10 * 1024 * 1024 // 10 MB
-
 export function generateUploadId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
-export async function uploadFileInChunks(
+export function uploadFile(
   file: File,
-  uploadId: string,
   onProgress: (pct: number) => void
-): Promise<void> {
-  const totalChunks = Math.ceil(file.size / CHUNK_SIZE)
-
-  for (let i = 0; i < totalChunks; i++) {
-    const start = i * CHUNK_SIZE
-    const end = Math.min(start + CHUNK_SIZE, file.size)
-    const chunk = file.slice(start, end)
-
+): Promise<string> {
+  return new Promise((resolve, reject) => {
     const form = new FormData()
-    form.append("upload_id", uploadId)
-    form.append("chunk_index", String(i))
-    form.append("total_chunks", String(totalChunks))
-    form.append("chunk", chunk, file.name)
+    form.append("file", file, file.name)
 
-    const res = await fetch(`/api/upload/chunk`, {
-      method: "POST",
-      body: form,
-    })
+    const xhr = new XMLHttpRequest()
+    xhr.open("POST", "/api/upload")
 
-    if (!res.ok) {
-      throw new Error(`Chunk ${i} failed: ${await res.text()}`)
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        onProgress(Math.round((e.loaded / e.total) * 100))
+      }
     }
 
-    onProgress(Math.round(((i + 1) / totalChunks) * 100))
-  }
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const data = JSON.parse(xhr.responseText)
+          resolve(data.upload_id)
+        } catch {
+          reject(new Error("Invalid response from server"))
+        }
+      } else {
+        let message = xhr.responseText
+        try {
+          message = JSON.parse(xhr.responseText).error ?? xhr.responseText
+        } catch {
+          /* use raw text */
+        }
+        reject(new Error(message || `Upload failed (${xhr.status})`))
+      }
+    }
+
+    xhr.onerror = () => reject(new Error("Network error during upload"))
+    xhr.send(form)
+  })
 }

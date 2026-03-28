@@ -1,18 +1,26 @@
+export async function deleteUpload(uploadId: string): Promise<void> {
+  await fetch(`/api/upload/${uploadId}`, { method: "DELETE" })
+}
+
 async function fetchPlot(
   endpoint: string,
   params: Record<string, string>
 ): Promise<string> {
-  const form = new FormData()
-  Object.entries(params).forEach(([k, v]) => form.append(k, v))
+  const qs = new URLSearchParams(params).toString()
 
-  const res = await fetch(`/api/${endpoint}`, {
+  const res = await fetch(`/api/${endpoint}?${qs}`, {
     method: "POST",
-    body: form,
   })
 
   if (!res.ok) {
     const text = await res.text()
-    throw new Error(text || `Request failed: ${res.status}`)
+    let message = text
+    try {
+      message = JSON.parse(text).error ?? text
+    } catch {
+      /* use raw text */
+    }
+    throw new Error(message || `Request failed (${res.status})`)
   }
 
   const blob = await res.blob()

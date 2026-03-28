@@ -4,7 +4,8 @@ import { useRef, useState } from "react"
 import { UploadCloud, X, CheckCircle2 } from "lucide-react"
 import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
-import { generateUploadId, uploadFileInChunks } from "@/lib/upload"
+import { uploadFile } from "@/lib/upload"
+import { deleteUpload } from "@/lib/api"
 
 interface FileUploadProps {
   label: string
@@ -19,6 +20,7 @@ export function FileUpload({ label, accept, onUploadComplete, onClear }: FileUpl
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(0)
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
+  const [currentUploadId, setCurrentUploadId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   async function handleFile(file: File) {
@@ -27,10 +29,9 @@ export function FileUpload({ label, accept, onUploadComplete, onClear }: FileUpl
     setProgress(0)
     setUploadedFile(null)
 
-    const uploadId = generateUploadId()
-
     try {
-      await uploadFileInChunks(file, uploadId, setProgress)
+      const uploadId = await uploadFile(file, setProgress)
+      setCurrentUploadId(uploadId)
       setUploadedFile(file)
       onUploadComplete(uploadId, file)
     } catch (e) {
@@ -41,6 +42,8 @@ export function FileUpload({ label, accept, onUploadComplete, onClear }: FileUpl
   }
 
   function handleClear() {
+    if (currentUploadId) deleteUpload(currentUploadId)
+    setCurrentUploadId(null)
     setUploadedFile(null)
     setProgress(0)
     setError(null)
