@@ -4,8 +4,14 @@ library(future)
 library(promises)
 library(uuid)
 
-# Worker pool - one persistent R session per worker, non-blocking concurrency
-plan(multisession, workers = as.integer(Sys.getenv("NUM_WORKERS", unset = "4")))
+# Worker pool — multicore (fork) on Linux so GTF is shared memory, not copied.
+# Falls back to multisession on Windows/macOS (local dev).
+n_workers <- as.integer(Sys.getenv("NUM_WORKERS", unset = "2"))
+if (future::supportsMulticore()) {
+  plan(multicore, workers = n_workers)
+} else {
+  plan(multisession, workers = n_workers)
+}
 
 UPLOAD_DIR <- Sys.getenv("UPLOAD_DIR", unset = "/tmp/uploads")
 SESSION_TTL_SECS <- 900L # 15 minutes
@@ -68,7 +74,7 @@ render_png <- function(plot_obj, width = 1600, height = 1200, res = 150) {
 #  Router config
 #* @plumber
 function(pr) {
-  pr_set_error(pr, function(req, res, err) {
+  pr$setErrorHandler(function(req, res, err) {
     msg <- conditionMessage(err)
     log_error(req$REQUEST_METHOD, " ", req$PATH_INFO, " -> ", msg)
     res$status <- 500
@@ -113,7 +119,9 @@ function(req, res) {
 #  Session
 #* @filter session
 function(req, res) {
-  if (req$PATH_INFO == "/health") {
+  # Skip session check for health endpoint and plumber-internal paths (swagger, favicon)
+  bypass <- c("/health", "/favicon.ico")
+  if (req$PATH_INFO %in% bypass || startsWith(req$PATH_INFO, "/__")) {
     return(plumber::forward())
   }
 

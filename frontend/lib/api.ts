@@ -1,4 +1,5 @@
 import { getSessionId } from "@/lib/session"
+import { friendlyError } from "@/lib/errors"
 
 export async function deleteUpload(uploadId: string): Promise<void> {
   await fetch(`/api/upload/${uploadId}`, {
@@ -19,14 +20,11 @@ async function fetchPlot(
   })
 
   if (!res.ok) {
-    const text = await res.text()
-    let message = text
+    let serverMessage: string | undefined
     try {
-      message = JSON.parse(text).error ?? text
-    } catch {
-      /* use raw text */
-    }
-    throw new Error(message || `Request failed (${res.status})`)
+      serverMessage = (await res.json()).error
+    } catch { /* ignore */ }
+    throw new Error(friendlyError(res.status, serverMessage))
   }
 
   const blob = await res.blob()

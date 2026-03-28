@@ -1,5 +1,6 @@
 import { fileURLToPath } from "url"
 import path from "path"
+import { withSentryConfig } from "@sentry/nextjs"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 

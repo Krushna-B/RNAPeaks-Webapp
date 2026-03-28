@@ -1,6 +1,6 @@
 "use client"
 
-import { Download } from "lucide-react"
+import { AlertCircle, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 interface PlotResultProps {
@@ -29,8 +29,9 @@ export function PlotResult({ imageUrl, loading, error }: PlotResultProps) {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-64 rounded-lg border border-destructive/50 bg-destructive/5">
-        <p className="text-sm text-destructive max-w-md text-center px-4">{error}</p>
+      <div className="flex flex-col items-center justify-center h-64 gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-6">
+        <AlertCircle className="h-8 w-8 text-destructive/70 shrink-0" />
+        <p className="text-sm text-destructive text-center max-w-sm leading-relaxed">{error}</p>
       </div>
     )
   }
