@@ -43,14 +43,35 @@ function(pr) {
 
 
 # CORS
+# Set ALLOWED_ORIGIN env var to your frontend URL in production.
+# Defaults to * (open) if not set, which is fine for local dev.
 #* @filter cors
 function(req, res) {
-  res$setHeader("Access-Control-Allow-Origin", "*")
-  res$setHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-  res$setHeader("Access-Control-Allow-Headers", "Content-Type")
+  allowed_origin <- Sys.getenv("ALLOWED_ORIGIN", unset = "*")
+  res$setHeader("Access-Control-Allow-Origin", allowed_origin)
+  res$setHeader("Access-Control-Allow-Methods", "POST, GET, DELETE, OPTIONS")
+  res$setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
   if (req$REQUEST_METHOD == "OPTIONS") {
     res$status <- 200
     return(list())
+  }
+  plumber::forward()
+}
+
+
+# Auth
+# When HF_SECRET_TOKEN is set, every request must carry a matching Bearer token.
+# In local dev without the env var set, auth is skipped entirely.
+#* @filter auth
+function(req, res) {
+  secret <- Sys.getenv("HF_SECRET_TOKEN", unset = "")
+  if (nchar(secret) == 0) return(plumber::forward())
+
+  auth_header <- req$HTTP_AUTHORIZATION
+  if (is.null(auth_header) || auth_header != paste("Bearer", secret)) {
+    log_error("Unauthorized request from ", req$REMOTE_ADDR, " to ", req$PATH_INFO)
+    res$status <- 401
+    return(list(error = "Unauthorized"))
   }
   plumber::forward()
 }

@@ -3,3 +3,6 @@ services:
     build: ./backend
     ports:
       - "7860:7860"
+    environment:
+      - HF_SECRET_TOKEN=${HF_SECRET_TOKEN}
+      - ALLOWED_ORIGIN=http://localhost:3000
