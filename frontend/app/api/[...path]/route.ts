@@ -11,7 +11,10 @@ async function proxyRequest(
   method: string
 ) {
   if (!HF_SPACE_URL) {
-    return NextResponse.json({ error: "Backend not configured" }, { status: 503 })
+    return NextResponse.json(
+      { error: "Backend not configured" },
+      { status: 503 }
+    )
   }
 
   const { path } = await params
@@ -24,12 +27,16 @@ async function proxyRequest(
   const contentType = req.headers.get("content-type")
   if (contentType) headers["content-type"] = contentType
 
+  const sessionId = req.headers.get("x-session-id")
+  if (sessionId) headers["x-session-id"] = sessionId
+
   const body = method !== "DELETE" ? await req.arrayBuffer() : undefined
 
   const res = await fetch(backendUrl, { method, headers, body })
 
   if (!res.ok) {
-    const errorContentType = res.headers.get("content-type") ?? "application/json"
+    const errorContentType =
+      res.headers.get("content-type") ?? "application/json"
     const text = await res.text()
     return new NextResponse(text, {
       status: res.status,
@@ -37,17 +44,24 @@ async function proxyRequest(
     })
   }
 
-  const responseContentType = res.headers.get("content-type") ?? "application/octet-stream"
+  const responseContentType =
+    res.headers.get("content-type") ?? "application/octet-stream"
   return new NextResponse(res.body, {
     status: res.status,
     headers: { "content-type": responseContentType },
   })
 }
 
-export function POST(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
+export function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> }
+) {
   return proxyRequest(req, params, "POST")
 }
 
-export function DELETE(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
+export function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> }
+) {
   return proxyRequest(req, params, "DELETE")
 }

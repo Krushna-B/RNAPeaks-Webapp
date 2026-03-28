@@ -1,6 +1,4 @@
-export function generateUploadId(): string {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
-}
+import { getSessionId } from "@/lib/session"
 
 export function uploadFile(
   file: File,
@@ -12,6 +10,7 @@ export function uploadFile(
 
     const xhr = new XMLHttpRequest()
     xhr.open("POST", "/api/upload")
+    xhr.setRequestHeader("X-Session-ID", getSessionId())
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) {

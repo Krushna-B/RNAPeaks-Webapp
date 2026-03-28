@@ -1,5 +1,10 @@
+import { getSessionId } from "@/lib/session"
+
 export async function deleteUpload(uploadId: string): Promise<void> {
-  await fetch(`/api/upload/${uploadId}`, { method: "DELETE" })
+  await fetch(`/api/upload/${uploadId}`, {
+    method: "DELETE",
+    headers: { "X-Session-ID": getSessionId() },
+  })
 }
 
 async function fetchPlot(
@@ -10,6 +15,7 @@ async function fetchPlot(
 
   const res = await fetch(`/api/${endpoint}?${qs}`, {
     method: "POST",
+    headers: { "X-Session-ID": getSessionId() },
   })
 
   if (!res.ok) {

@@ -6,3 +6,4 @@ services:
     environment:
       - HF_SECRET_TOKEN=${HF_SECRET_TOKEN}
       - ALLOWED_ORIGIN=http://localhost:3000
+      - NUM_WORKERS=4
