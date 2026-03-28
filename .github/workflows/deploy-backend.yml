@@ -17,11 +17,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Push backend to HF Space
+      - name: Push backend subtree to HF Space
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           git config user.email "ci@github"
           git config user.name "GitHub Actions"
-          git remote add hf https://Excyte:$HF_TOKEN@huggingface.co/spaces/Excyte/rna-peaks-backend
-          git subtree push --prefix=backend hf_space main
+          git remote add hf https://Excyte:${HF_TOKEN}@huggingface.co/spaces/Excyte/rna-peaks-backend
+          git subtree split --prefix=backend -b hf-deploy
+          git push hf hf-deploy:main --force
+          git branch -D hf-deploy

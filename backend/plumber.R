@@ -1,7 +1,32 @@
 library(RNAPeaks)
 library(ggplot2)
+library(uuid)
 
-# Logging helpers
+UPLOAD_DIR <- Sys.getenv("UPLOAD_DIR", unset = "/tmp/uploads")
+SESSION_TTL_SECS <- 900L # 15 minutes
+
+# ── Param helpers ───────────────────────────────────────────────────────────────
+
+opt_str <- function(x, default = NULL) {
+  if (is.null(x) || (is.character(x) && nchar(trimws(x)) == 0)) default else x
+}
+opt_int <- function(x, default) {
+  v <- opt_str(x)
+  if (is.null(v)) default else as.integer(v)
+}
+opt_num <- function(x, default) {
+  v <- opt_str(x)
+  if (is.null(v)) default else as.numeric(v)
+}
+opt_groups <- function(x) {
+  v <- opt_str(x)
+  if (is.null(v)) c("Retained", "Excluded", "Control") else strsplit(v, ",")[[1]]
+}
+opt_txid <- function(x) {
+  v <- opt_str(x)
+  if (is.null(v) || v == "NA") NA else v
+}
+
 log_info <- function(...) message(format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), " [INFO]  ", ...)
 log_error <- function(...) message(format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), " [ERROR] ", ...)
 
@@ -15,25 +40,42 @@ gtf <- tryCatch(
 )
 log_info("GTF ready. gtf_loaded=", !is.null(gtf))
 
-log_info("Installing Genome...")
-BiocManager::install("BSgenome.Hsapiens.UCSC.hg38")
 
-# Helpers
-get_upload_path <- function(upload_id) {
-  if (is.null(upload_id) || nchar(trimws(upload_id)) == 0) {
-    stop("No upload ID provided. Please upload a file first.")
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+validate_id <- function(id, label) {
+  if (is.null(id) || !grepl("^[0-9a-f\\-]{1,64}$", id)) {
+    stop(paste0("Invalid ", label, "."))
   }
-  path <- file.path("/tmp/uploads", upload_id)
-  if (!file.exists(path)) {
-    stop("File session not found. Please upload your file again.")
-  }
+  invisible(id)
+}
+
+get_upload_path <- function(session_id, upload_id) {
+  validate_id(session_id, "session ID")
+  validate_id(upload_id, "upload ID")
+  path <- file.path(UPLOAD_DIR, session_id, upload_id)
+  if (!file.exists(path)) stop("File session not found. Please upload your file again.")
   path
 }
 
-# Router-level config: custom error handler so actual messages reach the client
+cleanup_old_sessions <- function() {
+  dirs <- list.dirs(UPLOAD_DIR, full.names = TRUE, recursive = FALSE)
+  now <- as.numeric(Sys.time())
+  for (d in dirs) {
+    info <- file.info(d)
+    if (!is.na(info$mtime) && (now - as.numeric(info$mtime)) > SESSION_TTL_SECS) {
+      unlink(d, recursive = TRUE)
+      log_info("TTL cleanup session=", basename(d))
+    }
+  }
+}
+
+
+# ── Router config ──────────────────────────────────────────────────────────────
+
 #* @plumber
 function(pr) {
-  pr_set_error(pr, function(req, res, err) {
+  pr$setErrorHandler(function(req, res, err) {
     msg <- conditionMessage(err)
     log_error(req$REQUEST_METHOD, " ", req$PATH_INFO, " -> ", msg)
     res$status <- 500
@@ -42,15 +84,14 @@ function(pr) {
 }
 
 
-# CORS
-# Set ALLOWED_ORIGIN env var to your frontend URL in production.
-# Defaults to * (open) if not set, which is fine for local dev.
+# ── CORS ───────────────────────────────────────────────────────────────────────
+
 #* @filter cors
 function(req, res) {
   allowed_origin <- Sys.getenv("ALLOWED_ORIGIN", unset = "*")
   res$setHeader("Access-Control-Allow-Origin", allowed_origin)
   res$setHeader("Access-Control-Allow-Methods", "POST, GET, DELETE, OPTIONS")
-  res$setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
+  res$setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Session-ID")
   if (req$REQUEST_METHOD == "OPTIONS") {
     res$status <- 200
     return(list())
@@ -59,17 +100,18 @@ function(req, res) {
 }
 
 
-# Auth
-# When HF_SECRET_TOKEN is set, every request must carry a matching Bearer token.
-# In local dev without the env var set, auth is skipped entirely.
+# ── Auth ───────────────────────────────────────────────────────────────────────
+
 #* @filter auth
 function(req, res) {
   secret <- Sys.getenv("HF_SECRET_TOKEN", unset = "")
-  if (nchar(secret) == 0) return(plumber::forward())
+  if (nchar(secret) == 0) {
+    return(plumber::forward())
+  }
 
   auth_header <- req$HTTP_AUTHORIZATION
   if (is.null(auth_header) || auth_header != paste("Bearer", secret)) {
-    log_error("Unauthorized request from ", req$REMOTE_ADDR, " to ", req$PATH_INFO)
+    log_error("Unauthorized from ", req$REMOTE_ADDR, " -> ", req$PATH_INFO)
     res$status <- 401
     return(list(error = "Unauthorized"))
   }
@@ -77,15 +119,36 @@ function(req, res) {
 }
 
 
-# Health
+# ── Session ────────────────────────────────────────────────────────────────────
+
+#* @filter session
+function(req, res) {
+  bypass <- c("/health", "/favicon.ico")
+  if (req$PATH_INFO %in% bypass || startsWith(req$PATH_INFO, "/__")) {
+    return(plumber::forward())
+  }
+
+  sid <- req$HTTP_X_SESSION_ID
+  if (is.null(sid) || !grepl("^[0-9a-f]{32}$", sid)) {
+    log_error("Invalid session ID from ", req$REMOTE_ADDR, " -> ", req$PATH_INFO)
+    res$status <- 400
+    return(list(error = "Missing or invalid session ID."))
+  }
+  req$session_id <- sid
+  plumber::forward()
+}
+
+
+# ── Health ─────────────────────────────────────────────────────────────────────
+
 #* @get /health
 function() {
-  log_info("Health check")
   list(status = "ok", gtf_loaded = !is.null(gtf))
 }
 
 
-# Upload
+# ── Upload ─────────────────────────────────────────────────────────────────────
+
 #* @post /upload
 #* @parser multi
 function(req) {
@@ -95,65 +158,84 @@ function(req) {
       if (is.null(file_data) || length(file_data) == 0) {
         stop("No file received. Please select a file to upload.")
       }
-      upload_id <- paste0(
-        as.integer(Sys.time()), "-",
-        paste0(sample(c(letters, as.character(0:9)), 7, replace = TRUE), collapse = "")
-      )
-      dir.create("/tmp/uploads", recursive = TRUE, showWarnings = FALSE)
-      writeBin(file_data, file.path("/tmp/uploads", upload_id))
-      log_info("Uploaded file upload_id=", upload_id, " size=", length(file_data), "B")
+      session_dir <- file.path(UPLOAD_DIR, req$session_id)
+      dir.create(session_dir, recursive = TRUE, showWarnings = FALSE)
+
+      upload_id <- uuid::UUIDgenerate()
+      writeBin(file_data, file.path(session_dir, upload_id))
+      log_info("Uploaded upload_id=", upload_id, " session=", req$session_id, " size=", length(file_data), "B")
+
+      cleanup_old_sessions()
       list(upload_id = upload_id, size = length(file_data))
     },
     error = function(e) {
       msg <- conditionMessage(e)
       log_error("upload: ", msg)
-      user_msg <- if (grepl("No file received", msg)) {
+      stop(if (grepl("No file received", msg)) {
         msg
       } else {
         "Upload failed. The file may be corrupted or in an unsupported format."
-      }
-      stop(user_msg)
+      })
     }
   )
 }
 
 
-# Delete Upload
+# ── Delete Upload ──────────────────────────────────────────────────────────────
+
 #* @delete /upload/<upload_id>
-function(upload_id) {
-  path <- file.path("/tmp/uploads", upload_id)
-  if (file.exists(path)) {
-    unlink(path)
-    log_info("Deleted upload upload_id=", upload_id)
+function(req, upload_id) {
+  valid <- tryCatch(
+    {
+      validate_id(upload_id, "upload ID")
+      TRUE
+    },
+    error = function(e) FALSE
+  )
+  if (valid) {
+    path <- file.path(UPLOAD_DIR, req$session_id, upload_id)
+    if (file.exists(path)) {
+      unlink(path)
+      log_info("Deleted upload_id=", upload_id, " session=", req$session_id)
+    }
   }
   list(status = "ok")
 }
 
 
-# Plot Gene
+# ── Plot Gene ──────────────────────────────────────────────────────────────────
+
 #* @post /plot-gene
 #* @serializer png list(width = 1600, height = 1200, res = 150)
-function(upload_id, geneID, species = "Human", peak_col = "purple",
-         order_by = "Count", five_to_three = "FALSE") {
-  log_info("plot-gene start upload_id=", upload_id, " geneID=", geneID, " species=", species)
+function(req, upload_id, geneID, species = "Human", peak_col = "purple",
+         order_by = "Count", five_to_three = "FALSE",
+         TxID = NULL, merge = NULL, total_arrows = NULL, max_per_intron = NULL,
+         exon_col = NULL, utr_col = NULL, peaks_width = NULL) {
+  log_info("plot-gene session=", req$session_id, " geneID=", geneID)
   tryCatch(
     {
-      path <- get_upload_path(upload_id)
+      path <- get_upload_path(req$session_id, upload_id)
       bed <- utils::read.table(path, header = FALSE, sep = "\t")
       bed <- checkBed(bed)
       result <- PlotGene(
         bed = bed, geneID = geneID, gtf = gtf, species = species,
+        TxID = opt_txid(TxID),
+        merge = opt_int(merge, 0),
         peak_col = peak_col, order_by = order_by,
         five_to_three = as.logical(five_to_three),
+        total_arrows = opt_int(total_arrows, 6),
+        max_per_intron = opt_int(max_per_intron, 2),
+        exon_col = opt_str(exon_col, "black"),
+        utr_col = opt_str(utr_col, "dark gray"),
+        peaks_width = opt_num(peaks_width, 0.3),
         RNA_Peaks_File_Path = NULL, Bed_File_Path = NULL
       )
-      log_info("plot-gene success geneID=", geneID)
       print(result$plot)
     },
     error = function(e) {
       msg <- conditionMessage(e)
-      log_error("plot-gene geneID=", geneID, ": ", msg)
-      user_msg <- if (grepl("File session not found|No upload ID", msg)) {
+      log_error("plot-gene: ", msg)
+      stop(if (grepl("File session not found|No upload ID|Invalid", msg)) {
         msg
       } else if (grepl("checkBed|column|format", msg, ignore.case = TRUE)) {
         "Your BED file format is invalid. Make sure it has tab-separated columns: chr, start, end, name, score, strand."
@@ -163,68 +245,77 @@ function(upload_id, geneID, species = "Human", peak_col = "purple",
         "Could not read your BED file. Make sure it is a valid tab-separated text file."
       } else {
         paste0("PlotGene failed: ", msg)
-      }
-      stop(user_msg)
+      })
     }
   )
 }
 
 
-# Plot Region
+# ── Plot Region ────────────────────────────────────────────────────────────────
+
 #* @post /plot-region
 #* @serializer png list(width = 1600, height = 1200, res = 150)
-function(upload_id, Chr, Start, End, Strand, peak_col = "blue", order_by = "Count") {
-  log_info(
-    "plot-region start upload_id=", upload_id,
-    " region=", Chr, ":", Start, "-", End, " strand=", Strand
-  )
+function(req, upload_id, Chr, Start, End, Strand, peak_col = "blue", order_by = "Count",
+         geneID = NULL, TxID = NULL, merge = NULL, total_arrows = NULL, max_per_intron = NULL,
+         exon_col = NULL, utr_col = NULL) {
+  log_info("plot-region session=", req$session_id, " region=", Chr, ":", Start, "-", End)
   tryCatch(
     {
-      path <- get_upload_path(upload_id)
+      path <- get_upload_path(req$session_id, upload_id)
       bed <- utils::read.table(path, header = FALSE, sep = "\t")
       bed <- checkBed(bed)
       result <- PlotRegion(
         bed = bed, gtf = gtf, Chr = Chr,
         Start = as.integer(Start), End = as.integer(End),
-        Strand = Strand, peak_col = peak_col, order_by = order_by,
+        Strand = Strand,
+        geneID = opt_str(geneID, NULL),
+        TxID = opt_txid(TxID),
+        merge = opt_int(merge, 0),
+        peak_col = peak_col, order_by = order_by,
+        total_arrows = opt_int(total_arrows, 12),
+        max_per_intron = opt_int(max_per_intron, 5),
+        exon_col = opt_str(exon_col, "black"),
+        utr_col = opt_str(utr_col, "dark gray"),
         RNA_Peaks_File_Path = NULL, Bed_File_Path = NULL
       )
-      log_info("plot-region success region=", Chr, ":", Start, "-", End)
       print(result$plot)
     },
     error = function(e) {
       msg <- conditionMessage(e)
-      log_error("plot-region ", Chr, ":", Start, "-", End, ": ", msg)
-      user_msg <- if (grepl("File session not found|No upload ID", msg)) {
+      log_error("plot-region: ", msg)
+      stop(if (grepl("File session not found|No upload ID|Invalid", msg)) {
         msg
       } else if (grepl("checkBed|column|format", msg, ignore.case = TRUE)) {
         "Your BED file format is invalid. Make sure it has tab-separated columns: chr, start, end, name, score, strand."
       } else if (grepl("no peaks|zero|empty|not found", msg, ignore.case = TRUE)) {
-        paste0(
-          "No peaks found in region ", Chr, ":", Start, "-", End,
-          ". Try expanding the coordinates or checking the strand."
-        )
+        paste0("No peaks found in region ", Chr, ":", Start, "-", End, ". Try expanding the coordinates or checking the strand.")
       } else if (grepl("read.table|scan|parse", msg, ignore.case = TRUE)) {
         "Could not read your BED file. Make sure it is a valid tab-separated text file."
       } else {
         paste0("PlotRegion failed: ", msg)
-      }
-      stop(user_msg)
+      })
     }
   )
 }
 
 
-# Splicing Map
+# ── Splicing Map ───────────────────────────────────────────────────────────────
+
 #* @post /splicing-map
 #* @serializer png list(width = 1400, height = 900, res = 150)
-function(bed_upload_id, mats_upload_id,
-         WidthIntoExon = "50", WidthIntoIntron = "300", moving_average = "50") {
-  log_info("splicing-map start bed=", bed_upload_id, " mats=", mats_upload_id)
+function(req, bed_upload_id, mats_upload_id,
+         WidthIntoExon = "50", WidthIntoIntron = "300", moving_average = "50",
+         p_valueRetainedAndExclusion = NULL, p_valueControls = NULL,
+         retained_IncLevelDifference = NULL, exclusion_IncLevelDifference = NULL,
+         Min_Count = NULL, groups = NULL, control_multiplier = NULL,
+         z_threshold = NULL, min_consecutive = NULL,
+         title = NULL, retained_col = NULL, excluded_col = NULL, control_col = NULL,
+         exon_col = NULL, line_width = NULL, axis_text_size = NULL, title_size = NULL) {
+  log_info("splicing-map session=", req$session_id)
   tryCatch(
     {
-      bed_path <- get_upload_path(bed_upload_id)
-      mats_path <- get_upload_path(mats_upload_id)
+      bed_path <- get_upload_path(req$session_id, bed_upload_id)
+      mats_path <- get_upload_path(req$session_id, mats_upload_id)
       bed <- utils::read.table(bed_path, header = FALSE, sep = "\t")
       mats <- utils::read.table(mats_path, header = TRUE, sep = "\t")
       plot <- createSplicingMap(
@@ -232,15 +323,31 @@ function(bed_upload_id, mats_upload_id,
         WidthIntoExon = as.integer(WidthIntoExon),
         WidthIntoIntron = as.integer(WidthIntoIntron),
         moving_average = as.integer(moving_average),
-        verbose = FALSE
+        p_valueRetainedAndExclusion = opt_num(p_valueRetainedAndExclusion, 0.05),
+        p_valueControls = opt_num(p_valueControls, 0.95),
+        retained_IncLevelDifference = opt_num(retained_IncLevelDifference, 0.1),
+        exclusion_IncLevelDifference = opt_num(exclusion_IncLevelDifference, -0.1),
+        Min_Count = opt_int(Min_Count, 50),
+        groups = opt_groups(groups),
+        control_multiplier = opt_num(control_multiplier, 2.0),
+        z_threshold = opt_num(z_threshold, 1.96),
+        min_consecutive = opt_int(min_consecutive, 10),
+        title = opt_str(title, ""),
+        retained_col = opt_str(retained_col, "blue"),
+        excluded_col = opt_str(excluded_col, "red"),
+        control_col = opt_str(control_col, "black"),
+        exon_col = opt_str(exon_col, "navy"),
+        line_width = opt_num(line_width, 0.8),
+        axis_text_size = opt_num(axis_text_size, 11),
+        title_size = opt_num(title_size, 20),
+        cores = 1L, verbose = FALSE
       )
-      log_info("splicing-map success")
       print(plot)
     },
     error = function(e) {
       msg <- conditionMessage(e)
       log_error("splicing-map: ", msg)
-      user_msg <- if (grepl("File session not found|No upload ID", msg)) {
+      stop(if (grepl("File session not found|No upload ID|Invalid", msg)) {
         msg
       } else if (grepl("checkBed|column|format", msg, ignore.case = TRUE)) {
         "Your BED file format is invalid. Make sure it has tab-separated columns: chr, start, end, name, score, strand."
@@ -250,37 +357,59 @@ function(bed_upload_id, mats_upload_id,
         "Could not read one of your files. Make sure both files are valid tab-separated text files."
       } else {
         paste0("Splicing map failed: ", msg)
-      }
-      stop(user_msg)
+      })
     }
   )
 }
 
 
-# Sequence Map
+# ── Sequence Map ───────────────────────────────────────────────────────────────
+
 #* @post /sequence-map
 #* @serializer png list(width = 1400, height = 900, res = 150)
-function(mats_upload_id, sequence,
-         WidthIntoExon = "50", WidthIntoIntron = "250", moving_average = "40") {
-  log_info("sequence-map start mats=", mats_upload_id, " sequence=", sequence)
+function(req, mats_upload_id, sequence,
+         WidthIntoExon = "50", WidthIntoIntron = "250", moving_average = "40",
+         p_valueRetainedAndExclusion = NULL, p_valueControls = NULL,
+         retained_IncLevelDifference = NULL, exclusion_IncLevelDifference = NULL,
+         Min_Count = NULL, groups = NULL, control_multiplier = NULL,
+         z_threshold = NULL, min_consecutive = NULL,
+         title = NULL, retained_col = NULL, excluded_col = NULL, control_col = NULL,
+         exon_col = NULL, line_width = NULL, axis_text_size = NULL, title_size = NULL) {
+  log_info("sequence-map session=", req$session_id, " sequence=", sequence)
   tryCatch(
     {
-      path <- get_upload_path(mats_upload_id)
+      path <- get_upload_path(req$session_id, mats_upload_id)
       mats <- utils::read.table(path, header = TRUE, sep = "\t")
       plot <- createSequenceMap(
         SEMATS = mats, sequence = sequence,
         WidthIntoExon = as.integer(WidthIntoExon),
         WidthIntoIntron = as.integer(WidthIntoIntron),
         moving_average = as.integer(moving_average),
-        verbose = FALSE
+        p_valueRetainedAndExclusion = opt_num(p_valueRetainedAndExclusion, 0.05),
+        p_valueControls = opt_num(p_valueControls, 0.95),
+        retained_IncLevelDifference = opt_num(retained_IncLevelDifference, 0.1),
+        exclusion_IncLevelDifference = opt_num(exclusion_IncLevelDifference, -0.1),
+        Min_Count = opt_int(Min_Count, 50),
+        groups = opt_groups(groups),
+        control_multiplier = opt_num(control_multiplier, 2.0),
+        z_threshold = opt_num(z_threshold, 1.96),
+        min_consecutive = opt_int(min_consecutive, 10),
+        title = opt_str(title, ""),
+        retained_col = opt_str(retained_col, "blue"),
+        excluded_col = opt_str(excluded_col, "red"),
+        control_col = opt_str(control_col, "black"),
+        exon_col = opt_str(exon_col, "navy"),
+        line_width = opt_num(line_width, 0.8),
+        axis_text_size = opt_num(axis_text_size, 11),
+        title_size = opt_num(title_size, 20),
+        cores = 1L, verbose = FALSE
       )
-      log_info("sequence-map success sequence=", sequence)
       print(plot)
     },
     error = function(e) {
       msg <- conditionMessage(e)
-      log_error("sequence-map sequence=", sequence, ": ", msg)
-      user_msg <- if (grepl("File session not found|No upload ID", msg)) {
+      log_error("sequence-map: ", msg)
+      stop(if (grepl("File session not found|No upload ID|Invalid", msg)) {
         msg
       } else if (grepl("SE.MATS|header|column", msg, ignore.case = TRUE)) {
         "Your SE.MATS file appears to be invalid. Make sure it is a properly formatted rMATS output file with a header row."
@@ -290,8 +419,7 @@ function(mats_upload_id, sequence,
         "Could not read your SE.MATS file. Make sure it is a valid tab-separated text file."
       } else {
         paste0("Sequence map failed: ", msg)
-      }
-      stop(user_msg)
+      })
     }
   )
 }

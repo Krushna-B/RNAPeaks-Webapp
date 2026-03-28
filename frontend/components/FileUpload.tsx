@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { UploadCloud, X, CheckCircle2 } from "lucide-react"
+import { AlertCircle, UploadCloud, X, CheckCircle2 } from "lucide-react"
 import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
 import { uploadFile } from "@/lib/upload"
@@ -113,7 +113,10 @@ export function FileUpload({ label, accept, onUploadComplete, onClear }: FileUpl
       )}
 
       {error && (
-        <p className="text-sm text-destructive">{error}</p>
+        <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2">
+          <AlertCircle className="h-4 w-4 text-destructive/70 mt-0.5 shrink-0" />
+          <p className="text-sm text-destructive leading-snug">{error}</p>
+        </div>
       )}
 
       <input

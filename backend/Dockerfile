@@ -1,6 +1,6 @@
 FROM rocker/r-ver:4.3.3
 
-# System dependencies for Bioconductor packages
+# System dependencies for Bioconductor packages + nginx
 RUN apt-get update && apt-get install -y \
   libcurl4-openssl-dev \
   libssl-dev \
@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y \
   libbz2-dev \
   liblzma-dev \
   zlib1g-dev \
+  nginx \
   && rm -rf /var/lib/apt/lists/*
 
 # Install BiocManager + core dependencies
@@ -30,13 +31,19 @@ RUN R -e " \
   if (!requireNamespace('RNAPeaks', quietly=TRUE)) stop('RNAPeaks installation failed') \
   "
 
-# Install plumber
-RUN R -e "install.packages('plumber'); library(plumber)"
+# Install BSgenome at build time
+RUN R -e "BiocManager::install('BSgenome.Hsapiens.UCSC.hg38', ask=FALSE)"
 
-COPY plumber.R /app/plumber.R
+# Install plumber and uuid
+RUN R -e "install.packages(c('plumber', 'uuid'), repos='https://cloud.r-project.org'); library(plumber)"
+
+COPY plumber.R  /app/plumber.R
+COPY nginx.conf /etc/nginx/nginx.conf
+COPY start.sh   /app/start.sh
+RUN chmod +x /app/start.sh
 
 WORKDIR /app
 
 EXPOSE 7860
 
-CMD ["R", "-e", "pr <- plumber::plumb('/app/plumber.R'); pr$run(host='0.0.0.0', port=7860)"]
+CMD ["/app/start.sh"]
