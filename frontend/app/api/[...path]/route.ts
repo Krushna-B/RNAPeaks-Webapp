@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
+import * as Sentry from "@sentry/nextjs"
+import logger from "@/lib/logger"
 
 const HF_SPACE_URL = process.env.HF_SPACE_URL
 const HF_SECRET_TOKEN = process.env.HF_SECRET_TOKEN
