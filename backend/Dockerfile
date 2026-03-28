@@ -1,6 +1,6 @@
 FROM rocker/r-ver:4.3.3
 
-# System dependencies for Bioconductor packages
+# System dependencies for Bioconductor packages + nginx
 RUN apt-get update && apt-get install -y \
   libcurl4-openssl-dev \
   libssl-dev \
@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y \
   libbz2-dev \
   liblzma-dev \
   zlib1g-dev \
+  nginx \
   && rm -rf /var/lib/apt/lists/*
 
 # Install BiocManager + core dependencies
@@ -33,16 +34,16 @@ RUN R -e " \
 # Install BSgenome at build time
 RUN R -e "BiocManager::install('BSgenome.Hsapiens.UCSC.hg38', ask=FALSE)"
 
-# Install plumber last so upgrade='always' in RNAPeaks install cannot downgrade it
-RUN R -e "install.packages('plumber', repos='https://cloud.r-project.org'); library(plumber)"
+# Install plumber and uuid
+RUN R -e "install.packages(c('plumber', 'uuid'), repos='https://cloud.r-project.org'); library(plumber)"
 
-# Install async + UUID packages for concurrent request handling
-RUN R -e "install.packages(c('future', 'promises', 'uuid'), repos='https://cloud.r-project.org')"
-
-COPY plumber.R /app/plumber.R
+COPY plumber.R  /app/plumber.R
+COPY nginx.conf /etc/nginx/nginx.conf
+COPY start.sh   /app/start.sh
+RUN chmod +x /app/start.sh
 
 WORKDIR /app
 
 EXPOSE 7860
 
-CMD ["R", "-e", "pr <- plumber::plumb('/app/plumber.R'); pr$run(host='0.0.0.0', port=7860)"]
+CMD ["/app/start.sh"]

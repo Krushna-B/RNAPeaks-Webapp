@@ -7,3 +7,5 @@ services:
       - HF_SECRET_TOKEN=${HF_SECRET_TOKEN}
       - ALLOWED_ORIGIN=http://localhost:3000
       - NUM_WORKERS=2
+    mem_limit: 8g
+    memswap_limit: 16g

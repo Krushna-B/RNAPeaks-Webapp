@@ -1,17 +1,6 @@
 library(RNAPeaks)
 library(ggplot2)
-library(future)
-library(promises)
 library(uuid)
-
-# Worker pool — multicore (fork) on Linux so GTF is shared memory, not copied.
-# Falls back to multisession on Windows/macOS (local dev).
-n_workers <- as.integer(Sys.getenv("NUM_WORKERS", unset = "2"))
-if (future::supportsMulticore()) {
-  plan(multicore, workers = n_workers)
-} else {
-  plan(multisession, workers = n_workers)
-}
 
 UPLOAD_DIR <- Sys.getenv("UPLOAD_DIR", unset = "/tmp/uploads")
 SESSION_TTL_SECS <- 900L # 15 minutes
@@ -30,8 +19,8 @@ gtf <- tryCatch(
 log_info("GTF ready. gtf_loaded=", !is.null(gtf))
 
 
-#  Helpers
-# Strict allowlist: only hex chars and dashes — blocks all path traversal
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
 validate_id <- function(id, label) {
   if (is.null(id) || !grepl("^[0-9a-f\\-]{1,64}$", id)) {
     stop(paste0("Invalid ", label, "."))
@@ -43,9 +32,7 @@ get_upload_path <- function(session_id, upload_id) {
   validate_id(session_id, "session ID")
   validate_id(upload_id, "upload ID")
   path <- file.path(UPLOAD_DIR, session_id, upload_id)
-  if (!file.exists(path)) {
-    stop("File session not found. Please upload your file again.")
-  }
+  if (!file.exists(path)) stop("File session not found. Please upload your file again.")
   path
 }
 
@@ -61,17 +48,9 @@ cleanup_old_sessions <- function() {
   }
 }
 
-# Render a ggplot to PNG bytes - called inside worker processes
-render_png <- function(plot_obj, width = 1600, height = 1200, res = 150) {
-  tmp <- tempfile(fileext = ".png")
-  on.exit(unlink(tmp), add = TRUE)
-  png(tmp, width = width, height = height, res = res)
-  tryCatch(print(plot_obj), finally = dev.off())
-  readBin(tmp, "raw", n = file.info(tmp)$size)
-}
 
+# ── Router config ──────────────────────────────────────────────────────────────
 
-#  Router config
 #* @plumber
 function(pr) {
   pr$setErrorHandler(function(req, res, err) {
@@ -83,7 +62,8 @@ function(pr) {
 }
 
 
-#  CORS
+# ── CORS ───────────────────────────────────────────────────────────────────────
+
 #* @filter cors
 function(req, res) {
   allowed_origin <- Sys.getenv("ALLOWED_ORIGIN", unset = "*")
@@ -98,7 +78,8 @@ function(req, res) {
 }
 
 
-#  Auth
+# ── Auth ───────────────────────────────────────────────────────────────────────
+
 #* @filter auth
 function(req, res) {
   secret <- Sys.getenv("HF_SECRET_TOKEN", unset = "")
@@ -116,10 +97,10 @@ function(req, res) {
 }
 
 
-#  Session
+# ── Session ────────────────────────────────────────────────────────────────────
+
 #* @filter session
 function(req, res) {
-  # Skip session check for health endpoint and plumber-internal paths (swagger, favicon)
   bypass <- c("/health", "/favicon.ico")
   if (req$PATH_INFO %in% bypass || startsWith(req$PATH_INFO, "/__")) {
     return(plumber::forward())
@@ -136,15 +117,16 @@ function(req, res) {
 }
 
 
-#  Health
+# ── Health ─────────────────────────────────────────────────────────────────────
+
 #* @get /health
 function() {
-  log_info("Health check")
   list(status = "ok", gtf_loaded = !is.null(gtf))
 }
 
 
-#  Upload
+# ── Upload ─────────────────────────────────────────────────────────────────────
+
 #* @post /upload
 #* @parser multi
 function(req) {
@@ -162,7 +144,6 @@ function(req) {
       log_info("Uploaded upload_id=", upload_id, " session=", req$session_id, " size=", length(file_data), "B")
 
       cleanup_old_sessions()
-
       list(upload_id = upload_id, size = length(file_data))
     },
     error = function(e) {
@@ -178,7 +159,8 @@ function(req) {
 }
 
 
-#  Delete Upload
+# ── Delete Upload ──────────────────────────────────────────────────────────────
+
 #* @delete /upload/<upload_id>
 function(req, upload_id) {
   valid <- tryCatch(
@@ -199,176 +181,158 @@ function(req, upload_id) {
 }
 
 
-#  Plot Gene
+# ── Plot Gene ──────────────────────────────────────────────────────────────────
+
 #* @post /plot-gene
-#* @serializer contentType list(type="image/png")
+#* @serializer png list(width = 1600, height = 1200, res = 150)
 function(req, upload_id, geneID, species = "Human", peak_col = "purple",
          order_by = "Count", five_to_three = "FALSE") {
-  session_id <- req$session_id
-  local_gtf <- gtf
-  log_info("plot-gene session=", session_id, " upload_id=", upload_id, " geneID=", geneID)
-
-  future_promise({
-    library(RNAPeaks)
-    library(ggplot2)
-    tryCatch(
-      {
-        path <- get_upload_path(session_id, upload_id)
-        bed <- utils::read.table(path, header = FALSE, sep = "\t")
-        bed <- checkBed(bed)
-        result <- PlotGene(
-          bed = bed, geneID = geneID, gtf = local_gtf, species = species,
-          peak_col = peak_col, order_by = order_by,
-          five_to_three = as.logical(five_to_three),
-          RNA_Peaks_File_Path = NULL, Bed_File_Path = NULL
-        )
-        render_png(result$plot, width = 1600, height = 1200, res = 150)
-      },
-      error = function(e) {
-        msg <- conditionMessage(e)
-        stop(if (grepl("File session not found|No upload ID|Invalid", msg)) {
-          msg
-        } else if (grepl("checkBed|column|format", msg, ignore.case = TRUE)) {
-          "Your BED file format is invalid. Make sure it has tab-separated columns: chr, start, end, name, score, strand."
-        } else if (grepl("not found|cannot find|no peaks|zero", msg, ignore.case = TRUE)) {
-          paste0("Gene '", geneID, "' was not found or has no peaks in your data. Check the gene symbol or Ensembl ID.")
-        } else if (grepl("read.table|scan|parse", msg, ignore.case = TRUE)) {
-          "Could not read your BED file. Make sure it is a valid tab-separated text file."
-        } else {
-          paste0("PlotGene failed: ", msg)
-        })
-      }
-    )
-  })
+  log_info("plot-gene session=", req$session_id, " geneID=", geneID)
+  tryCatch(
+    {
+      path <- get_upload_path(req$session_id, upload_id)
+      bed <- utils::read.table(path, header = FALSE, sep = "\t")
+      bed <- checkBed(bed)
+      result <- PlotGene(
+        bed = bed, geneID = geneID, gtf = gtf, species = species,
+        peak_col = peak_col, order_by = order_by,
+        five_to_three = as.logical(five_to_three),
+        RNA_Peaks_File_Path = NULL, Bed_File_Path = NULL
+      )
+      print(result$plot)
+    },
+    error = function(e) {
+      msg <- conditionMessage(e)
+      log_error("plot-gene: ", msg)
+      stop(if (grepl("File session not found|No upload ID|Invalid", msg)) {
+        msg
+      } else if (grepl("checkBed|column|format", msg, ignore.case = TRUE)) {
+        "Your BED file format is invalid. Make sure it has tab-separated columns: chr, start, end, name, score, strand."
+      } else if (grepl("not found|cannot find|no peaks|zero", msg, ignore.case = TRUE)) {
+        paste0("Gene '", geneID, "' was not found or has no peaks in your data. Check the gene symbol or Ensembl ID.")
+      } else if (grepl("read.table|scan|parse", msg, ignore.case = TRUE)) {
+        "Could not read your BED file. Make sure it is a valid tab-separated text file."
+      } else {
+        paste0("PlotGene failed: ", msg)
+      })
+    }
+  )
 }
 
 
-#  Plot Region
+# ── Plot Region ────────────────────────────────────────────────────────────────
+
 #* @post /plot-region
-#* @serializer contentType list(type="image/png")
+#* @serializer png list(width = 1600, height = 1200, res = 150)
 function(req, upload_id, Chr, Start, End, Strand, peak_col = "blue", order_by = "Count") {
-  session_id <- req$session_id
-  local_gtf <- gtf
-  log_info("plot-region session=", session_id, " region=", Chr, ":", Start, "-", End)
-
-  future_promise({
-    library(RNAPeaks)
-    library(ggplot2)
-    tryCatch(
-      {
-        path <- get_upload_path(session_id, upload_id)
-        bed <- utils::read.table(path, header = FALSE, sep = "\t")
-        bed <- checkBed(bed)
-        result <- PlotRegion(
-          bed = bed, gtf = local_gtf, Chr = Chr,
-          Start = as.integer(Start), End = as.integer(End),
-          Strand = Strand, peak_col = peak_col, order_by = order_by,
-          RNA_Peaks_File_Path = NULL, Bed_File_Path = NULL
-        )
-        render_png(result$plot, width = 1600, height = 1200, res = 150)
-      },
-      error = function(e) {
-        msg <- conditionMessage(e)
-        stop(if (grepl("File session not found|No upload ID|Invalid", msg)) {
-          msg
-        } else if (grepl("checkBed|column|format", msg, ignore.case = TRUE)) {
-          "Your BED file format is invalid. Make sure it has tab-separated columns: chr, start, end, name, score, strand."
-        } else if (grepl("no peaks|zero|empty|not found", msg, ignore.case = TRUE)) {
-          paste0("No peaks found in region ", Chr, ":", Start, "-", End, ". Try expanding the coordinates or checking the strand.")
-        } else if (grepl("read.table|scan|parse", msg, ignore.case = TRUE)) {
-          "Could not read your BED file. Make sure it is a valid tab-separated text file."
-        } else {
-          paste0("PlotRegion failed: ", msg)
-        })
-      }
-    )
-  })
+  log_info("plot-region session=", req$session_id, " region=", Chr, ":", Start, "-", End)
+  tryCatch(
+    {
+      path <- get_upload_path(req$session_id, upload_id)
+      bed <- utils::read.table(path, header = FALSE, sep = "\t")
+      bed <- checkBed(bed)
+      result <- PlotRegion(
+        bed = bed, gtf = gtf, Chr = Chr,
+        Start = as.integer(Start), End = as.integer(End),
+        Strand = Strand, peak_col = peak_col, order_by = order_by,
+        RNA_Peaks_File_Path = NULL, Bed_File_Path = NULL
+      )
+      print(result$plot)
+    },
+    error = function(e) {
+      msg <- conditionMessage(e)
+      log_error("plot-region: ", msg)
+      stop(if (grepl("File session not found|No upload ID|Invalid", msg)) {
+        msg
+      } else if (grepl("checkBed|column|format", msg, ignore.case = TRUE)) {
+        "Your BED file format is invalid. Make sure it has tab-separated columns: chr, start, end, name, score, strand."
+      } else if (grepl("no peaks|zero|empty|not found", msg, ignore.case = TRUE)) {
+        paste0("No peaks found in region ", Chr, ":", Start, "-", End, ". Try expanding the coordinates or checking the strand.")
+      } else if (grepl("read.table|scan|parse", msg, ignore.case = TRUE)) {
+        "Could not read your BED file. Make sure it is a valid tab-separated text file."
+      } else {
+        paste0("PlotRegion failed: ", msg)
+      })
+    }
+  )
 }
 
 
-#  Splicing Map
+# ── Splicing Map ───────────────────────────────────────────────────────────────
+
 #* @post /splicing-map
-#* @serializer contentType list(type="image/png")
+#* @serializer png list(width = 1400, height = 900, res = 150)
 function(req, bed_upload_id, mats_upload_id,
          WidthIntoExon = "50", WidthIntoIntron = "300", moving_average = "50") {
-  session_id <- req$session_id
-  log_info("splicing-map session=", session_id)
-
-  future_promise({
-    library(RNAPeaks)
-    library(ggplot2)
-    tryCatch(
-      {
-        bed_path <- get_upload_path(session_id, bed_upload_id)
-        mats_path <- get_upload_path(session_id, mats_upload_id)
-        bed <- utils::read.table(bed_path, header = FALSE, sep = "\t")
-        mats <- utils::read.table(mats_path, header = TRUE, sep = "\t")
-        plot <- createSplicingMap(
-          bed_file = bed, SEMATS = mats,
-          WidthIntoExon = as.integer(WidthIntoExon),
-          WidthIntoIntron = as.integer(WidthIntoIntron),
-          moving_average = as.integer(moving_average),
-          verbose = FALSE
-        )
-        render_png(plot, width = 1400, height = 900, res = 150)
-      },
-      error = function(e) {
-        msg <- conditionMessage(e)
-        stop(if (grepl("File session not found|No upload ID|Invalid", msg)) {
-          msg
-        } else if (grepl("checkBed|column|format", msg, ignore.case = TRUE)) {
-          "Your BED file format is invalid. Make sure it has tab-separated columns: chr, start, end, name, score, strand."
-        } else if (grepl("SE.MATS|header|column.*mats|mats.*column", msg, ignore.case = TRUE)) {
-          "Your SE.MATS file appears to be invalid. Make sure it is a properly formatted rMATS output file with a header row."
-        } else if (grepl("read.table|scan|parse", msg, ignore.case = TRUE)) {
-          "Could not read one of your files. Make sure both files are valid tab-separated text files."
-        } else {
-          paste0("Splicing map failed: ", msg)
-        })
-      }
-    )
-  })
+  log_info("splicing-map session=", req$session_id)
+  tryCatch(
+    {
+      bed_path <- get_upload_path(req$session_id, bed_upload_id)
+      mats_path <- get_upload_path(req$session_id, mats_upload_id)
+      bed <- utils::read.table(bed_path, header = FALSE, sep = "\t")
+      mats <- utils::read.table(mats_path, header = TRUE, sep = "\t")
+      plot <- createSplicingMap(
+        bed_file = bed, SEMATS = mats,
+        WidthIntoExon = as.integer(WidthIntoExon),
+        WidthIntoIntron = as.integer(WidthIntoIntron),
+        moving_average = as.integer(moving_average),
+        verbose = FALSE
+      )
+      print(plot)
+    },
+    error = function(e) {
+      msg <- conditionMessage(e)
+      log_error("splicing-map: ", msg)
+      stop(if (grepl("File session not found|No upload ID|Invalid", msg)) {
+        msg
+      } else if (grepl("checkBed|column|format", msg, ignore.case = TRUE)) {
+        "Your BED file format is invalid. Make sure it has tab-separated columns: chr, start, end, name, score, strand."
+      } else if (grepl("SE.MATS|header|column.*mats|mats.*column", msg, ignore.case = TRUE)) {
+        "Your SE.MATS file appears to be invalid. Make sure it is a properly formatted rMATS output file with a header row."
+      } else if (grepl("read.table|scan|parse", msg, ignore.case = TRUE)) {
+        "Could not read one of your files. Make sure both files are valid tab-separated text files."
+      } else {
+        paste0("Splicing map failed: ", msg)
+      })
+    }
+  )
 }
 
 
-#  Sequence Map
+# ── Sequence Map ───────────────────────────────────────────────────────────────
+
 #* @post /sequence-map
-#* @serializer contentType list(type="image/png")
+#* @serializer png list(width = 1400, height = 900, res = 150)
 function(req, mats_upload_id, sequence,
          WidthIntoExon = "50", WidthIntoIntron = "250", moving_average = "40") {
-  session_id <- req$session_id
-  log_info("sequence-map session=", session_id, " sequence=", sequence)
-
-  future_promise({
-    library(RNAPeaks)
-    library(ggplot2)
-    tryCatch(
-      {
-        path <- get_upload_path(session_id, mats_upload_id)
-        mats <- utils::read.table(path, header = TRUE, sep = "\t")
-        plot <- createSequenceMap(
-          SEMATS = mats, sequence = sequence,
-          WidthIntoExon = as.integer(WidthIntoExon),
-          WidthIntoIntron = as.integer(WidthIntoIntron),
-          moving_average = as.integer(moving_average),
-          verbose = FALSE
-        )
-        render_png(plot, width = 1400, height = 900, res = 150)
-      },
-      error = function(e) {
-        msg <- conditionMessage(e)
-        stop(if (grepl("File session not found|No upload ID|Invalid", msg)) {
-          msg
-        } else if (grepl("SE.MATS|header|column", msg, ignore.case = TRUE)) {
-          "Your SE.MATS file appears to be invalid. Make sure it is a properly formatted rMATS output file with a header row."
-        } else if (grepl("sequence|motif|IUPAC|invalid.*base", msg, ignore.case = TRUE)) {
-          paste0("Invalid sequence motif '", sequence, "'. Use standard nucleotide letters or IUPAC ambiguity codes (e.g. Y, R, N).")
-        } else if (grepl("read.table|scan|parse", msg, ignore.case = TRUE)) {
-          "Could not read your SE.MATS file. Make sure it is a valid tab-separated text file."
-        } else {
-          paste0("Sequence map failed: ", msg)
-        })
-      }
-    )
-  })
+  log_info("sequence-map session=", req$session_id, " sequence=", sequence)
+  tryCatch(
+    {
+      path <- get_upload_path(req$session_id, mats_upload_id)
+      mats <- utils::read.table(path, header = TRUE, sep = "\t")
+      plot <- createSequenceMap(
+        SEMATS = mats, sequence = sequence,
+        WidthIntoExon = as.integer(WidthIntoExon),
+        WidthIntoIntron = as.integer(WidthIntoIntron),
+        moving_average = as.integer(moving_average),
+        verbose = FALSE
+      )
+      print(plot)
+    },
+    error = function(e) {
+      msg <- conditionMessage(e)
+      log_error("sequence-map: ", msg)
+      stop(if (grepl("File session not found|No upload ID|Invalid", msg)) {
+        msg
+      } else if (grepl("SE.MATS|header|column", msg, ignore.case = TRUE)) {
+        "Your SE.MATS file appears to be invalid. Make sure it is a properly formatted rMATS output file with a header row."
+      } else if (grepl("sequence|motif|IUPAC|invalid.*base", msg, ignore.case = TRUE)) {
+        paste0("Invalid sequence motif '", sequence, "'. Use standard nucleotide letters or IUPAC ambiguity codes (e.g. Y, R, N).")
+      } else if (grepl("read.table|scan|parse", msg, ignore.case = TRUE)) {
+        "Could not read your SE.MATS file. Make sure it is a valid tab-separated text file."
+      } else {
+        paste0("Sequence map failed: ", msg)
+      })
+    }
+  )
 }
