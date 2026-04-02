@@ -4,6 +4,37 @@ import logger from "@/lib/logger"
 
 const HF_SPACE_URL = process.env.HF_SPACE_URL
 const HF_SECRET_TOKEN = process.env.HF_SECRET_TOKEN
+const SESSION_SECRET = process.env.SESSION_SECRET ?? ""
+const TOKEN_TTL_SECS = 86400 // 24 hours — must match /api/session
+
+async function verifySessionToken(token: string): Promise<string | null> {
+  const parts = token.split("|")
+  if (parts.length !== 3) return null
+  const [nonce, ts, sig] = parts
+
+  if (!/^[0-9a-f]{32}$/.test(nonce)) return null
+
+  const timestamp = parseInt(ts, 10)
+  if (isNaN(timestamp)) return null
+  const age = Math.floor(Date.now() / 1000) - timestamp
+  if (age < 0 || age > TOKEN_TTL_SECS) return null
+
+  const enc = new TextEncoder()
+  const key = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(SESSION_SECRET),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  )
+  const expected = await crypto.subtle.sign("HMAC", key, enc.encode(`${nonce}|${ts}`))
+  const expectedHex = Array.from(new Uint8Array(expected))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+
+  if (sig !== expectedHex) return null
+  return nonce
+}
 
 async function proxyRequest(
   req: NextRequest,
@@ -11,9 +42,21 @@ async function proxyRequest(
   method: string
 ) {
   if (!HF_SPACE_URL) {
+    return NextResponse.json({ error: "Backend not configured" }, { status: 503 })
+  }
+  if (!SESSION_SECRET) {
+    return NextResponse.json({ error: "Server misconfigured" }, { status: 500 })
+  }
+
+  const sessionToken = req.headers.get("x-session-token")
+  if (!sessionToken) {
+    return NextResponse.json({ error: "Missing session token." }, { status: 400 })
+  }
+  const nonce = await verifySessionToken(sessionToken)
+  if (!nonce) {
     return NextResponse.json(
-      { error: "Backend not configured" },
-      { status: 503 }
+      { error: "Invalid or expired session. Please refresh the page." },
+      { status: 401 }
     )
   }
 
@@ -27,8 +70,7 @@ async function proxyRequest(
   const contentType = req.headers.get("content-type")
   if (contentType) headers["content-type"] = contentType
 
-  const sessionId = req.headers.get("x-session-id")
-  if (sessionId) headers["x-session-id"] = sessionId
+  headers["x-session-id"] = nonce
 
   const body = method !== "DELETE" ? await req.arrayBuffer() : undefined
 
