@@ -106,7 +106,7 @@ export function FileUpload({ label, accept, onUploadComplete, onClear }: FileUpl
               <p className="text-xs text-muted-foreground">{formatSize(uploadedFile.size)}</p>
             </div>
           </div>
-          <button onClick={handleClear} className="ml-2 text-muted-foreground hover:text-foreground shrink-0">
+          <button type="button" onClick={handleClear} className="ml-2 text-muted-foreground hover:text-foreground shrink-0">
             <X className="h-4 w-4" />
           </button>
         </div>

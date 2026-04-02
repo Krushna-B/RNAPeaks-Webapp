@@ -1,6 +1,9 @@
-library(RNAPeaks)
-library(ggplot2)
-library(uuid)
+suppressPackageStartupMessages({
+  library(RNAPeaks)
+  library(ggplot2)
+  library(uuid)
+  library(BSgenome.Hsapiens.UCSC.hg38)
+})
 
 UPLOAD_DIR <- Sys.getenv("UPLOAD_DIR", unset = "/tmp/uploads")
 SESSION_TTL_SECS <- 900L # 15 minutes
@@ -32,15 +35,22 @@ log_error <- function(...) message(format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), " 
 
 WORKER_START_TIME <- as.numeric(Sys.time())
 
-log_info("Loading GTF annotation...")
+log_info("Loading GTF annotations...")
 gtf <- tryCatch(
   LoadGTF(species = "Human"),
   error = function(e) {
-    log_error("GTF load failed: ", conditionMessage(e))
+    log_error("Human GTF load failed: ", conditionMessage(e))
     NULL
   }
 )
-log_info("GTF ready. gtf_loaded=", !is.null(gtf))
+gtf_mouse <- tryCatch(
+  LoadGTF(species = "Mouse"),
+  error = function(e) {
+    log_error("Mouse GTF load failed: ", conditionMessage(e))
+    NULL
+  }
+)
+log_info("GTF ready. human=", !is.null(gtf), " mouse=", !is.null(gtf_mouse))
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -251,8 +261,9 @@ function(req, upload_id, geneID, species = "Human", peak_col = "purple",
       path <- get_upload_path(req$session_id, upload_id)
       bed <- utils::read.table(path, header = FALSE, sep = "\t")
       bed <- checkBed(bed)
+      active_gtf <- if (species == "Mouse") gtf_mouse else gtf
       result <- PlotGene(
-        bed = bed, geneID = geneID, gtf = gtf, species = species,
+        bed = bed, geneID = geneID, gtf = active_gtf, species = species,
         TxID = opt_txid(TxID),
         merge = opt_int(merge, 0),
         peak_col = peak_col, order_by = order_by,
@@ -289,7 +300,8 @@ function(req, upload_id, geneID, species = "Human", peak_col = "purple",
 
 #* @post /plot-region
 #* @serializer png list(width = 1600, height = 1200, res = 150)
-function(req, upload_id, Chr, Start, End, Strand, peak_col = "blue", order_by = "Count",
+function(req, upload_id, Chr, Start, End, Strand, species = "Human",
+         peak_col = "blue", order_by = "Count",
          geneID = NULL, TxID = NULL, merge = NULL, total_arrows = NULL, max_per_intron = NULL,
          exon_col = NULL, utr_col = NULL) {
   log_info("plot-region session=", req$session_id, " region=", Chr, ":", Start, "-", End)
@@ -298,8 +310,9 @@ function(req, upload_id, Chr, Start, End, Strand, peak_col = "blue", order_by = 
       path <- get_upload_path(req$session_id, upload_id)
       bed <- utils::read.table(path, header = FALSE, sep = "\t")
       bed <- checkBed(bed)
+      active_gtf <- if (species == "Mouse") gtf_mouse else gtf
       result <- PlotRegion(
-        bed = bed, gtf = gtf, Chr = Chr,
+        bed = bed, gtf = active_gtf, Chr = Chr,
         Start = as.integer(Start), End = as.integer(End),
         Strand = Strand,
         geneID = opt_str(geneID, NULL),
@@ -457,3 +470,31 @@ function(req, mats_upload_id, sequence,
     }
   )
 }
+
+
+# ── JIT warm-up ────────────────────────────────────────────────────────────────
+# Force R to compile and cache the hot code paths so the first real request
+# is not penalised. Runs once at worker startup after all packages are loaded.
+
+tryCatch(
+  {
+    log_info("Running JIT warm-up...")
+
+    # ggplot2: trigger font/theme initialisation
+    p <- ggplot2::ggplot(data.frame(x = 1, y = 1), ggplot2::aes(x, y)) +
+      ggplot2::geom_point()
+    tmp <- tempfile(fileext = ".png")
+    grDevices::png(tmp, width = 10, height = 10)
+    print(p)
+    grDevices::dev.off()
+    unlink(tmp)
+
+    # BSgenome: load chromosome metadata into memory
+    invisible(BSgenome.Hsapiens.UCSC.hg38::BSgenome.Hsapiens.UCSC.hg38)
+
+    log_info("JIT warm-up complete.")
+  },
+  error = function(e) {
+    log_error("JIT warm-up failed (non-fatal): ", conditionMessage(e))
+  }
+)

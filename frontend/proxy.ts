@@ -14,7 +14,7 @@ async function validAdminCookie(value: string, secret: string): Promise<boolean>
   return value === expected
 }
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   if (!req.nextUrl.pathname.startsWith("/admin")) return NextResponse.next()
 
   const secret = process.env.ADMIN_SECRET
