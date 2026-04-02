@@ -75,7 +75,7 @@ jobs:
           printf 'FROM %s\n' "$IMAGE" > /tmp/hf-space/Dockerfile
 
           cd /tmp/hf-space
-          git init
+          git init -b main
           git add .
           git commit -m "Deploy backend sha-${{ github.sha }}"
           git remote add hf "https://Excyte:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE}"
