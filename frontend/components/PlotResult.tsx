@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import Image from "next/image"
 import { AlertCircle, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
@@ -65,7 +64,6 @@ export function PlotResult({
 
   useEffect(() => {
     if (!loading) {
-      // Defer resets so they're not synchronous state updates inside the effect body
       const t = setTimeout(() => {
         setProgress(0)
         setElapsed(0)
@@ -109,7 +107,7 @@ export function PlotResult({
   if (loading) {
     const stage = stageLabel(elapsed, stages)
     return (
-      <div className="flex h-64 flex-col items-center justify-center gap-4 rounded-lg border bg-muted/20 px-8">
+      <div className="flex h-full items-center justify-center">
         <div className="w-full max-w-sm space-y-3">
           <Progress value={progress} className="h-1.5" />
           <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -123,7 +121,7 @@ export function PlotResult({
 
   if (error) {
     return (
-      <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-6">
+      <div className="flex h-full flex-col items-center justify-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-6">
         <AlertCircle className="h-8 w-8 shrink-0 text-destructive/70" />
         <p className="max-w-sm text-center text-sm leading-relaxed text-destructive">
           {error}
@@ -134,28 +132,27 @@ export function PlotResult({
 
   if (!imageUrl) {
     return (
-      <div className="flex h-64 items-center justify-center rounded-lg border border-dashed bg-muted/10">
+      <div className="flex h-full items-center justify-center rounded-lg border border-dashed bg-muted/10">
         <p className="text-sm text-muted-foreground">Plot will appear here</p>
       </div>
     )
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex justify-end">
+    <div className="flex h-full flex-col gap-3">
+      <div className="flex shrink-0 justify-end">
         <Button variant="outline" size="sm" onClick={handleDownload}>
           <Download className="mr-2 h-4 w-4" />
           Download PNG
         </Button>
       </div>
-      <div className="overflow-hidden rounded-lg border bg-white">
-        <Image
+      {/* flex-1 + min-h-0 lets the image container shrink below its intrinsic size */}
+      <div className="relative flex-1 min-h-0 overflow-hidden rounded-lg border bg-white dark:bg-muted/10">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
           src={imageUrl}
           alt="RNAPeaks plot"
-          width={1600}
-          height={1200}
-          unoptimized
-          className="h-auto w-full"
+          className="h-full w-full object-contain"
         />
       </div>
     </div>

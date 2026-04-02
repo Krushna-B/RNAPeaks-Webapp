@@ -89,7 +89,10 @@ export function SequenceMapTab() {
 
   return (
     <div className="flex h-full">
-      <aside className="w-[300px] shrink-0 border-r bg-muted/20 flex flex-col overflow-hidden">
+      <form
+        className="w-[300px] shrink-0 border-r bg-muted/20 flex flex-col overflow-hidden"
+        onSubmit={(e) => { e.preventDefault(); if (canRun) handleRun() }}
+      >
         <div className="px-5 py-4 border-b">
           <p className="text-sm font-medium">Sequence Map</p>
           <p className="text-xs text-muted-foreground mt-0.5">Motif density around splicing events</p>
@@ -231,13 +234,13 @@ export function SequenceMapTab() {
             </SheetContent>
           </Sheet>
 
-          <Button onClick={handleRun} disabled={!canRun} className="flex-1">
+          <Button type="submit" disabled={!canRun} className="flex-1">
             {loading ? "Running…" : "Run Sequence Map"}
           </Button>
         </div>
-      </aside>
+      </form>
 
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-hidden flex flex-col min-h-0 p-6">
         <PlotResult imageUrl={imageUrl} loading={loading} error={error} jobKind="sequence" />
       </div>
     </div>
