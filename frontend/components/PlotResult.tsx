@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Image from "next/image"
 import { AlertCircle, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
@@ -15,11 +16,8 @@ export function PlotResult({ imageUrl, loading, error }: PlotResultProps) {
   const [progress, setProgress] = useState(0)
 
   useEffect(() => {
-    if (!loading) {
-      setProgress(0)
-      return
-    }
-    setProgress(8)
+    if (!loading) return
+    const start = setTimeout(() => setProgress(8), 0)
     const interval = setInterval(() => {
       setProgress((p) => {
         if (p >= 88) return p
@@ -27,7 +25,11 @@ export function PlotResult({ imageUrl, loading, error }: PlotResultProps) {
         return Math.min(p + increment, 88)
       })
     }, 700)
-    return () => clearInterval(interval)
+    return () => {
+      clearTimeout(start)
+      clearInterval(interval)
+      setProgress(0)
+    }
   }, [loading])
 
   function handleDownload() {
@@ -77,7 +79,7 @@ export function PlotResult({ imageUrl, loading, error }: PlotResultProps) {
         </Button>
       </div>
       <div className="rounded-lg border overflow-hidden bg-white">
-        <img src={imageUrl} alt="RNAPeaks plot" className="w-full h-auto" />
+        <Image src={imageUrl} alt="RNAPeaks plot" width={1600} height={1200} unoptimized className="w-full h-auto" />
       </div>
     </div>
   )
