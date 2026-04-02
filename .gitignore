@@ -9,3 +9,7 @@ backend/renv/
 
 # OS
 .DS_Store
+
+#Env
+.env*
+.env.*
