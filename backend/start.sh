@@ -56,7 +56,7 @@ echo "[start.sh] Waiting for workers to become ready..."
 for PORT in $(seq 7861 $((7860 + WORKERS))); do
   attempts=0
   until curl -sf "http://127.0.0.1:$PORT/health" | grep -q '"status":"ok"' 2>/dev/null; do
-    (( attempts++ ))
+    (( ++attempts ))
     if (( attempts >= 90 )); then
       echo "[start.sh] WARNING: worker on port $PORT did not become ready after 90s"
       break

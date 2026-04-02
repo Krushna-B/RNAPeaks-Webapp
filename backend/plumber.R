@@ -252,16 +252,33 @@ function(req, upload_id) {
 #* @post /plot-gene
 #* @serializer png list(width = 1600, height = 1200, res = 150)
 function(req, upload_id, geneID, species = "Human", peak_col = "purple",
-         order_by = "Count", five_to_three = "FALSE",
+         order_by = "Target", five_to_three = "FALSE",
          TxID = NULL, merge = NULL, total_arrows = NULL, max_per_intron = NULL,
-         exon_col = NULL, utr_col = NULL, peaks_width = NULL) {
+         gtf_upload_id = NULL, max_targets = NULL,
+         title_size = NULL, label_size = NULL, n_position_markers = NULL,
+         show_junctions = NULL,
+         highlight_start = NULL, highlight_end = NULL, highlight_col = NULL) {
   log_info("plot-gene session=", req$session_id, " geneID=", geneID)
   tryCatch(
     {
       path <- get_upload_path(req$session_id, upload_id)
       bed <- utils::read.table(path, header = FALSE, sep = "\t")
-      bed <- checkBed(bed)
-      active_gtf <- if (species == "Mouse") gtf_mouse else gtf
+
+      # Resolve GTF: prefer uploaded custom GTF, fall back to preloaded by species
+      active_gtf <- tryCatch({
+        gid <- opt_str(gtf_upload_id)
+        if (!is.null(gid)) {
+          gtf_path <- get_upload_path(req$session_id, gid)
+          log_info("plot-gene: loading custom GTF from upload_id=", gid)
+          LoadGTF(file = gtf_path)
+        } else {
+          if (species == "Mouse") gtf_mouse else gtf
+        }
+      }, error = function(e) {
+        log_error("Custom GTF load failed, falling back to preloaded: ", conditionMessage(e))
+        if (species == "Mouse") gtf_mouse else gtf
+      })
+
       result <- PlotGene(
         bed = bed, geneID = geneID, gtf = active_gtf, species = species,
         TxID = opt_txid(TxID),
@@ -270,9 +287,14 @@ function(req, upload_id, geneID, species = "Human", peak_col = "purple",
         five_to_three = as.logical(five_to_three),
         total_arrows = opt_int(total_arrows, 6),
         max_per_intron = opt_int(max_per_intron, 2),
-        exon_col = opt_str(exon_col, "black"),
-        utr_col = opt_str(utr_col, "dark gray"),
-        peaks_width = opt_num(peaks_width, 0.3),
+        max_targets = opt_int(max_targets, NULL),
+        title_size = opt_num(title_size, 14),
+        label_size = opt_num(label_size, 10),
+        n_position_markers = opt_int(n_position_markers, 5),
+        show_junctions = isTRUE(as.logical(opt_str(show_junctions, "FALSE"))),
+        highlight_start = opt_int(highlight_start, NULL),
+        highlight_end = opt_int(highlight_end, NULL),
+        highlight_col = opt_str(highlight_col, NULL),
         RNA_Peaks_File_Path = NULL, Bed_File_Path = NULL
       )
       print(result$plot)
@@ -309,7 +331,6 @@ function(req, upload_id, Chr, Start, End, Strand, species = "Human",
     {
       path <- get_upload_path(req$session_id, upload_id)
       bed <- utils::read.table(path, header = FALSE, sep = "\t")
-      bed <- checkBed(bed)
       active_gtf <- if (species == "Mouse") gtf_mouse else gtf
       result <- PlotRegion(
         bed = bed, gtf = active_gtf, Chr = Chr,

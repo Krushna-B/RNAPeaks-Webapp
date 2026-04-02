@@ -42,24 +42,30 @@ async function fetchPlot(
 
 export interface PlotGeneParams {
   uploadId: string
+  gtfUploadId?: string
   geneID: string
   species: string
   peakCol: string
   orderBy: string
   fiveToThree: string
-  // Advanced
   txID?: string
   merge?: string
   totalArrows?: string
   maxPerIntron?: string
-  exonCol?: string
-  utrCol?: string
-  peaksWidth?: string
+  maxTargets?: string
+  titleSize?: string
+  labelSize?: string
+  nPositionMarkers?: string
+  showJunctions?: string
+  highlightStart?: string
+  highlightEnd?: string
+  highlightCol?: string
 }
 
 export async function runPlotGene(params: PlotGeneParams): Promise<string> {
   return fetchPlot("plot-gene", {
     upload_id: params.uploadId,
+    gtf_upload_id: params.gtfUploadId ?? "",
     geneID: params.geneID,
     species: params.species,
     peak_col: params.peakCol,
@@ -69,9 +75,14 @@ export async function runPlotGene(params: PlotGeneParams): Promise<string> {
     merge: params.merge ?? "",
     total_arrows: params.totalArrows ?? "",
     max_per_intron: params.maxPerIntron ?? "",
-    exon_col: params.exonCol ?? "",
-    utr_col: params.utrCol ?? "",
-    peaks_width: params.peaksWidth ?? "",
+    max_targets: params.maxTargets ?? "",
+    title_size: params.titleSize ?? "",
+    label_size: params.labelSize ?? "",
+    n_position_markers: params.nPositionMarkers ?? "",
+    show_junctions: params.showJunctions ?? "",
+    highlight_start: params.highlightStart ?? "",
+    highlight_end: params.highlightEnd ?? "",
+    highlight_col: params.highlightCol ?? "",
   })
 }
 
