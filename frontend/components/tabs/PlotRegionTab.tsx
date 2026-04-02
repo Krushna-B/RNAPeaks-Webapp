@@ -199,7 +199,7 @@ export function PlotRegionTab() {
       </aside>
 
       <div className="flex-1 overflow-auto p-6">
-        <PlotResult imageUrl={imageUrl} loading={loading} error={error} />
+        <PlotResult imageUrl={imageUrl} loading={loading} error={error} jobKind="region" />
       </div>
     </div>
   )

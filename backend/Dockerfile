@@ -46,4 +46,9 @@ WORKDIR /app
 
 EXPOSE 7860
 
+# Mark the container unhealthy if the plumber workers (via nginx) stop responding.
+# start-period covers the ~130s GTF load; retries give a short grace window after that.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=3 \
+  CMD curl -sf http://localhost:7860/health | grep -q '"status":"ok"' || exit 1
+
 CMD ["/app/start.sh"]
