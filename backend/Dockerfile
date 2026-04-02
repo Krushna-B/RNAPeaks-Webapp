@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y \
   liblzma-dev \
   zlib1g-dev \
   nginx \
+  curl \
   && rm -rf /var/lib/apt/lists/*
 
 # Install BiocManager + core dependencies
