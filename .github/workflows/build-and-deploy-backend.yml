@@ -1,0 +1,81 @@
+name: Build & Deploy Backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    name: Build & Push Docker Image to GHCR
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/rna-peaks-backend
+          tags: |
+            type=sha,prefix=sha-
+            type=raw,value=latest
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  deploy:
+    name: Deploy to Hugging Face Space
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Push thin Dockerfile to HF Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          # Update this after you create the new HF Space (format: HFUsername/space-name)
+          HF_SPACE: Excyte/RNA-Peaks-Backend
+          IMAGE: ghcr.io/${{ github.repository_owner }}/rna-peaks-backend:latest
+        run: |
+          git config --global user.email "ci@github"
+          git config --global user.name "GitHub Actions"
+
+          mkdir -p /tmp/hf-space
+
+          cat > /tmp/hf-space/README.md << 'EOF'
+          ---
+          title: RNAPeaks Backend
+          colorFrom: purple
+          colorTo: blue
+          sdk: docker
+          pinned: false
+          ---
+          EOF
+
+          printf 'FROM %s\n' "$IMAGE" > /tmp/hf-space/Dockerfile
+
+          cd /tmp/hf-space
+          git init
+          git add .
+          git commit -m "Deploy backend sha-${{ github.sha }}"
+          git remote add hf "https://Excyte:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE}"
+          git push hf main --force
