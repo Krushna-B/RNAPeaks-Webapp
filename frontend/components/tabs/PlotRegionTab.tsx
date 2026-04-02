@@ -81,6 +81,7 @@ export function PlotRegionTab() {
       <form
         className="w-[300px] shrink-0 border-r bg-muted/20 flex flex-col overflow-hidden"
         onSubmit={(e) => { e.preventDefault(); if (canRun) handleRun() }}
+        onKeyDown={(e) => { if (e.key === "Enter" && !e.defaultPrevented && canRun) { e.preventDefault(); handleRun() } }}
       >
         <div className="px-5 py-4 border-b">
           <p className="text-sm font-medium">Plot Region</p>
@@ -144,7 +145,7 @@ export function PlotRegionTab() {
         <div className="px-5 py-4 border-t flex gap-2">
           <Sheet>
             <SheetTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-1.5 shrink-0">
+              <Button type="button" variant="outline" size="sm" className="gap-1.5 shrink-0">
                 <SlidersHorizontal className="h-3.5 w-3.5" />
                 Advanced
               </Button>

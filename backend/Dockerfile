@@ -31,11 +31,14 @@ RUN R -e " \
   if (!requireNamespace('RNAPeaks', quietly=TRUE)) stop('RNAPeaks installation failed') \
   "
 
-# Install BSgenome at build time
-RUN R -e "BiocManager::install('BSgenome.Hsapiens.UCSC.hg38', ask=FALSE)"
+# Install BSgenome packages at build time
+RUN R -e "BiocManager::install(c('BSgenome.Hsapiens.UCSC.hg38', 'BSgenome.Mmusculus.UCSC.mm10'), ask=FALSE)"
 
 # Install plumber and uuid
 RUN R -e "install.packages(c('plumber', 'uuid'), repos='https://cloud.r-project.org'); library(plumber)"
+
+# Pre-cache the GTF at build time so cold starts don't need to download it
+RUN R -e "library(RNAPeaks); LoadGTF(species='Human'); LoadGTF(species='Mouse')"
 
 COPY plumber.R  /app/plumber.R
 COPY nginx.conf /etc/nginx/nginx.conf
@@ -47,8 +50,7 @@ WORKDIR /app
 EXPOSE 7860
 
 # Mark the container unhealthy if the plumber workers (via nginx) stop responding.
-# start-period covers the ~130s GTF load; retries give a short grace window after that.
-HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
   CMD curl -sf http://localhost:7860/health | grep -q '"status":"ok"' || exit 1
 
 CMD ["/app/start.sh"]

@@ -51,9 +51,20 @@ for i in $(seq 1 "$WORKERS"); do
   echo "[start.sh] Worker $i started on port $PORT (pid ${WORKER_PIDS[-1]})"
 done
 
-# Give workers time to load GTF before nginx starts accepting traffic
-echo "[start.sh] Waiting for workers to finish loading GTF (~2 min)..."
-sleep 130
+# Poll workers until they respond to /health (GTF is pre-cached so this should be ~10-15s)
+echo "[start.sh] Waiting for workers to become ready..."
+for PORT in $(seq 7861 $((7860 + WORKERS))); do
+  attempts=0
+  until curl -sf "http://127.0.0.1:$PORT/health" | grep -q '"status":"ok"' 2>/dev/null; do
+    (( attempts++ ))
+    if (( attempts >= 90 )); then
+      echo "[start.sh] WARNING: worker on port $PORT did not become ready after 90s"
+      break
+    fi
+    sleep 1
+  done
+  echo "[start.sh] Worker on port $PORT is ready (${attempts}s)"
+done
 
 #Start nginx in the background so the shell can handle signals
 echo "[start.sh] Starting nginx on port 7860"

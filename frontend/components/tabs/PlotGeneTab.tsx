@@ -111,6 +111,7 @@ export function PlotGeneTab() {
       <form
         className="flex w-[300px] shrink-0 flex-col overflow-hidden border-r bg-muted/20"
         onSubmit={(e) => { e.preventDefault(); if (canRun) handleRun() }}
+        onKeyDown={(e) => { if (e.key === "Enter" && !e.defaultPrevented && canRun) { e.preventDefault(); handleRun() } }}
       >
         <div className="border-b px-5 py-4">
           <p className="text-sm font-medium">Plot Gene</p>
@@ -190,7 +191,7 @@ export function PlotGeneTab() {
         <div className="flex gap-2 border-t px-5 py-4">
           <Sheet>
             <SheetTrigger asChild>
-              <Button variant="outline" size="sm" className="shrink-0 gap-1.5">
+              <Button type="button" variant="outline" size="sm" className="shrink-0 gap-1.5">
                 <SlidersHorizontal className="h-3.5 w-3.5" />
                 Advanced
               </Button>
