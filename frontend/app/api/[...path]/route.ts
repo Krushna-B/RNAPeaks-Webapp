@@ -50,10 +50,12 @@ async function proxyRequest(
 
   const sessionToken = req.headers.get("x-session-token")
   if (!sessionToken) {
+    logger.warn("Proxy: missing session token")
     return NextResponse.json({ error: "Missing session token." }, { status: 400 })
   }
   const nonce = await verifySessionToken(sessionToken)
   if (!nonce) {
+    logger.warn("Proxy: invalid or expired session token")
     return NextResponse.json(
       { error: "Invalid or expired session. Please refresh the page." },
       { status: 401 }
@@ -74,12 +76,20 @@ async function proxyRequest(
 
   const body = method !== "DELETE" ? await req.arrayBuffer() : undefined
 
+  logger.info({ method, backendUrl }, "Proxy: forwarding request")
   const res = await fetch(backendUrl, { method, headers, body })
 
   if (!res.ok) {
     const errorContentType =
       res.headers.get("content-type") ?? "application/json"
     const text = await res.text()
+    if (res.status >= 500) {
+      Sentry.captureMessage(`Backend error ${res.status}: ${text}`, {
+        level: "error",
+        extra: { method, backendUrl },
+      })
+    }
+    logger.error({ method, backendUrl, status: res.status }, "Proxy: backend error")
     return new NextResponse(text, {
       status: res.status,
       headers: { "content-type": errorContentType },
