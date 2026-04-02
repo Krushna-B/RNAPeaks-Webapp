@@ -33,11 +33,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set lowercase image name
+        run: echo "IMAGE_NAME=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/rna-peaks-backend" >> $GITHUB_ENV
+
       - name: Extract image metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/rna-peaks-backend
+          images: ${{ env.IMAGE_NAME }}
           tags: |
             type=sha,prefix=sha-
             type=raw,value=latest
@@ -60,10 +63,11 @@ jobs:
       - name: Push thin Dockerfile to HF Space
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          # Update this after you create the new HF Space (format: HFUsername/space-name)
           HF_SPACE: Excyte/RNA-Peaks-Backend
           IMAGE: ghcr.io/${{ github.repository_owner }}/rna-peaks-backend:latest
         run: |
+          IMAGE_LC=$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')
+
           git config --global user.email "ci@github"
           git config --global user.name "GitHub Actions"
 
@@ -79,7 +83,7 @@ jobs:
           ---
           EOF
 
-          printf 'FROM %s\n' "$IMAGE" > /tmp/hf-space/Dockerfile
+          printf 'FROM %s\n' "$IMAGE_LC" > /tmp/hf-space/Dockerfile
 
           cd /tmp/hf-space
           git init -b main
