@@ -5,6 +5,33 @@ import { AlertCircle, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 
+async function downloadAsPdf(imageUrl: string) {
+  const img = new Image()
+  img.src = imageUrl
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve()
+    img.onerror = reject
+  })
+
+  const canvas = document.createElement("canvas")
+  canvas.width = img.naturalWidth
+  canvas.height = img.naturalHeight
+  const ctx = canvas.getContext("2d")!
+  ctx.drawImage(img, 0, 0)
+  const dataUrl = canvas.toDataURL("image/png")
+
+  const { jsPDF } = await import("jspdf")
+  const orientation = img.naturalWidth >= img.naturalHeight ? "l" : "p"
+  const pdf = new jsPDF({
+    orientation,
+    unit: "px",
+    format: [img.naturalWidth, img.naturalHeight],
+    hotfixes: ["px_scaling"],
+  })
+  pdf.addImage(dataUrl, "PNG", 0, 0, img.naturalWidth, img.naturalHeight)
+  pdf.save("rnapeaks-plot.pdf")
+}
+
 // Stage messages keyed by approximate elapsed seconds.
 // The last entry applies for all remaining time.
 const GENE_REGION_STAGES: [number, string][] = [
@@ -96,12 +123,17 @@ export function PlotResult({
     }
   }, [loading])
 
-  function handleDownload() {
+  function handleDownloadPng() {
     if (!imageUrl) return
     const a = document.createElement("a")
     a.href = imageUrl
     a.download = "rnapeaks-plot.png"
     a.click()
+  }
+
+  function handleDownloadPdf() {
+    if (!imageUrl) return
+    downloadAsPdf(imageUrl)
   }
 
   if (loading) {
@@ -140,10 +172,14 @@ export function PlotResult({
 
   return (
     <div className="flex h-full flex-col gap-3">
-      <div className="flex shrink-0 justify-end">
-        <Button variant="outline" size="sm" onClick={handleDownload}>
-          <Download className="mr-2 h-4 w-4" />
-          Download PNG
+      <div className="flex shrink-0 justify-end gap-2">
+        <Button variant="outline" size="sm" onClick={handleDownloadPng}>
+          <Download className="h-3.5 w-3.5" />
+          PNG
+        </Button>
+        <Button variant="outline" size="sm" onClick={handleDownloadPdf}>
+          <Download className="h-3.5 w-3.5" />
+          PDF
         </Button>
       </div>
       {/* flex-1 + min-h-0 lets the image container shrink below its intrinsic size */}

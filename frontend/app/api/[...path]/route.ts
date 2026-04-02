@@ -79,12 +79,16 @@ async function proxyRequest(
   const headers: Record<string, string> = {}
   if (HF_SECRET_TOKEN) headers["Authorization"] = `Bearer ${HF_SECRET_TOKEN}`
 
-  const contentType = req.headers.get("content-type")
-  if (contentType) headers["content-type"] = contentType
-
   headers["x-session-id"] = nonce
 
   const body = method !== "DELETE" ? await req.arrayBuffer() : undefined
+
+  // Only forward content-type when there is actually a body — DELETE has none,
+  // and forwarding the header without a body causes plumber to log a parser warning.
+  if (body !== undefined) {
+    const contentType = req.headers.get("content-type")
+    if (contentType) headers["content-type"] = contentType
+  }
 
   logger.info({ method, backendUrl }, "Proxy: forwarding request")
 

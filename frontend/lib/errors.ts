@@ -11,11 +11,11 @@ const STATUS_MESSAGES: Record<number, string> = {
  * Returns the best user-facing error message for a failed request.
  * Prefers a meaningful server-sent message over a generic status fallback.
  */
-export function friendlyError(status: number, serverMessage?: string): string {
-  if (serverMessage?.trim()) {
+export function friendlyError(status: number, serverMessage?: unknown): string {
+  if (typeof serverMessage === "string") {
     const s = serverMessage.trim()
     const lower = s.toLowerCase()
-    if (!lower.includes("internal server error") && !lower.startsWith("<!")) {
+    if (s && !lower.includes("internal server error") && !lower.startsWith("<!")) {
       return s
     }
   }

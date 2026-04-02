@@ -38,7 +38,10 @@ shutdown() {
 
 trap shutdown SIGTERM SIGINT
 
-#Start plumber workers 
+# Clear any corrupted AnnotationHub sqlite from a previous unclean shutdown.
+rm -f /root/.cache/R/AnnotationHub/annotationhub.sqlite3
+
+#Start plumber workers
 echo "[start.sh] Starting $WORKERS plumber worker(s)..."
 
 for i in $(seq 1 "$WORKERS"); do
