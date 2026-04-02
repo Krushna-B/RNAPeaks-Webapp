@@ -108,7 +108,10 @@ export function PlotGeneTab() {
 
   return (
     <div className="flex h-full">
-      <aside className="flex w-[300px] shrink-0 flex-col overflow-hidden border-r bg-muted/20">
+      <form
+        className="flex w-[300px] shrink-0 flex-col overflow-hidden border-r bg-muted/20"
+        onSubmit={(e) => { e.preventDefault(); if (canRun) handleRun() }}
+      >
         <div className="border-b px-5 py-4">
           <p className="text-sm font-medium">Plot Gene</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
@@ -282,13 +285,13 @@ export function PlotGeneTab() {
             </SheetContent>
           </Sheet>
 
-          <Button onClick={handleRun} disabled={!canRun} className="flex-1">
+          <Button type="submit" disabled={!canRun} className="flex-1">
             {loading ? "Running…" : "Run PlotGene"}
           </Button>
         </div>
-      </aside>
+      </form>
 
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-hidden flex flex-col min-h-0 p-6">
         <PlotResult
           imageUrl={imageUrl}
           loading={loading}

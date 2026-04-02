@@ -81,6 +81,9 @@ function(pr) {
     msg <- conditionMessage(err)
     log_error(req$REQUEST_METHOD, " ", req$PATH_INFO, " -> ", msg)
     res$status <- 500
+    # Force JSON serializer — routes annotated @serializer png would otherwise
+    # try to convert list(error=...) to raw bytes and crash the response pipeline.
+    res$serializer <- plumber::serializer_json()
     list(error = msg)
   })
 }
@@ -164,7 +167,7 @@ function() {
 
   # R GC memory (sum of Vcells column, convert to MB)
   gc_info <- gc(verbose = FALSE)
-  mem_mb <- round(sum(gc_info[, "used (Mb)"]), 1)
+  mem_mb <- round(sum(gc_info[, 2L]), 1)
 
   list(
     status           = "ok",
