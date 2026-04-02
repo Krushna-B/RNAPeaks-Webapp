@@ -45,16 +45,16 @@ export default function Home() {
         </div>
       </header>
 
-      <TabsContent value="plot-gene" className="flex-1 overflow-hidden mt-0">
+      <TabsContent value="plot-gene" className="flex-1 min-h-0 overflow-hidden mt-0">
         <PlotGeneTab />
       </TabsContent>
-      <TabsContent value="plot-region" className="flex-1 overflow-hidden mt-0">
+      <TabsContent value="plot-region" className="flex-1 min-h-0 overflow-hidden mt-0">
         <PlotRegionTab />
       </TabsContent>
-      <TabsContent value="splicing-map" className="flex-1 overflow-hidden mt-0">
+      <TabsContent value="splicing-map" className="flex-1 min-h-0 overflow-hidden mt-0">
         <SplicingMapTab />
       </TabsContent>
-      <TabsContent value="sequence-map" className="flex-1 overflow-hidden mt-0">
+      <TabsContent value="sequence-map" className="flex-1 min-h-0 overflow-hidden mt-0">
         <SequenceMapTab />
       </TabsContent>
     </Tabs>

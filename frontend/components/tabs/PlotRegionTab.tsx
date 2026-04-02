@@ -79,7 +79,7 @@ export function PlotRegionTab() {
   return (
     <div className="flex h-full">
       <form
-        className="w-[300px] shrink-0 border-r bg-muted/20 flex flex-col overflow-hidden"
+        className="flex h-full w-[300px] shrink-0 flex-col overflow-hidden border-r bg-muted/20"
         onSubmit={(e) => { e.preventDefault(); if (canRun) handleRun() }}
         onKeyDown={(e) => { if (e.key === "Enter" && !e.defaultPrevented && canRun) { e.preventDefault(); handleRun() } }}
       >
@@ -87,7 +87,7 @@ export function PlotRegionTab() {
           <p className="text-sm font-medium">Plot Region</p>
           <p className="text-xs text-muted-foreground mt-0.5">Visualize peaks in a genomic coordinate range</p>
         </div>
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 space-y-4">
           <FileUpload
             label="BED File"
             accept=".bed"
