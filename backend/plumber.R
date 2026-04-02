@@ -30,6 +30,8 @@ opt_txid <- function(x) {
 log_info <- function(...) message(format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), " [INFO]  ", ...)
 log_error <- function(...) message(format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), " [ERROR] ", ...)
 
+WORKER_START_TIME <- as.numeric(Sys.time())
+
 log_info("Loading GTF annotation...")
 gtf <- tryCatch(
   LoadGTF(species = "Human"),
@@ -123,7 +125,7 @@ function(req, res) {
 
 #* @filter session
 function(req, res) {
-  bypass <- c("/health", "/favicon.ico")
+  bypass <- c("/health", "/status", "/favicon.ico")
   if (req$PATH_INFO %in% bypass || startsWith(req$PATH_INFO, "/__")) {
     return(plumber::forward())
   }
@@ -144,6 +146,35 @@ function(req, res) {
 #* @get /health
 function() {
   list(status = "ok", gtf_loaded = !is.null(gtf))
+}
+
+
+# ── Status (admin) ─────────────────────────────────────────────────────────────
+
+#* @get /status
+function() {
+  now <- as.numeric(Sys.time())
+
+  # Count sessions: directories that exist under UPLOAD_DIR
+  all_dirs <- list.dirs(UPLOAD_DIR, full.names = TRUE, recursive = FALSE)
+  active_sessions <- sum(vapply(all_dirs, function(d) {
+    info <- file.info(d)
+    !is.na(info$mtime) && (now - as.numeric(info$mtime)) < SESSION_TTL_SECS
+  }, logical(1)))
+
+  # R GC memory (sum of Vcells column, convert to MB)
+  gc_info <- gc(verbose = FALSE)
+  mem_mb <- round(sum(gc_info[, "used (Mb)"]), 1)
+
+  list(
+    status           = "ok",
+    worker_pid       = Sys.getpid(),
+    gtf_loaded       = !is.null(gtf),
+    uptime_secs      = as.integer(now - WORKER_START_TIME),
+    active_sessions  = active_sessions,
+    total_sessions   = length(all_dirs),
+    r_memory_mb      = mem_mb
+  )
 }
 
 
