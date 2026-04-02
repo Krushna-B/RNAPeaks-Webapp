@@ -1,10 +1,11 @@
-import { getSessionId } from "@/lib/session"
+import { getSessionToken } from "@/lib/session"
 import { friendlyError } from "@/lib/errors"
 
 export async function deleteUpload(uploadId: string): Promise<void> {
+  const sessionToken = await getSessionToken()
   await fetch(`/api/upload/${uploadId}`, {
     method: "DELETE",
-    headers: { "X-Session-ID": getSessionId() },
+    headers: { "X-Session-Token": sessionToken },
   })
 }
 
@@ -12,6 +13,8 @@ async function fetchPlot(
   endpoint: string,
   params: Record<string, string>
 ): Promise<string> {
+  const sessionToken = await getSessionToken()
+
   // Strip empty strings so R uses its defaults
   const cleaned = Object.fromEntries(
     Object.entries(params).filter(([, v]) => v !== "")
@@ -20,7 +23,7 @@ async function fetchPlot(
 
   const res = await fetch(`/api/${endpoint}?${qs}`, {
     method: "POST",
-    headers: { "X-Session-ID": getSessionId() },
+    headers: { "X-Session-Token": sessionToken },
   })
 
   if (!res.ok) {

@@ -1,17 +1,19 @@
-import { getSessionId } from "@/lib/session"
+import { getSessionToken } from "@/lib/session"
 import { friendlyError } from "@/lib/errors"
 
-export function uploadFile(
+export async function uploadFile(
   file: File,
   onProgress: (pct: number) => void
 ): Promise<string> {
+  const sessionToken = await getSessionToken()
+
   return new Promise((resolve, reject) => {
     const form = new FormData()
     form.append("file", file, file.name)
 
     const xhr = new XMLHttpRequest()
     xhr.open("POST", "/api/upload")
-    xhr.setRequestHeader("X-Session-ID", getSessionId())
+    xhr.setRequestHeader("X-Session-Token", sessionToken)
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) {
