@@ -82,8 +82,8 @@ export function PlotGeneTab() {
   const [maxTargets, setMaxTargets] = useState("")
 
   // Appearance
-  const [titleSize, setTitleSize] = useState("14")
-  const [labelSize, setLabelSize] = useState("10")
+  const [titleSize, setTitleSize] = useState("25")
+  const [labelSize, setLabelSize] = useState("5")
   const [nPositionMarkers, setNPositionMarkers] = useState("5")
   const [totalArrows, setTotalArrows] = useState("6")
   const [maxPerIntron, setMaxPerIntron] = useState("2")
@@ -96,7 +96,8 @@ export function PlotGeneTab() {
   const [highlightEnabled, setHighlightEnabled] = useState(false)
   const [highlightStart, setHighlightStart] = useState("")
   const [highlightEnd, setHighlightEnd] = useState("")
-  const [highlightCol, setHighlightCol] = useState("red")
+  const [highlightCol, setHighlightCol] = useState("pink")
+  const [junctionColor, setJunctionColor] = useState("gray40")
 
   // Result
   const [imageUrl, setImageUrl] = useState<string | null>(null)
@@ -121,11 +122,12 @@ export function PlotGeneTab() {
         merge,
         totalArrows,
         maxPerIntron,
-        maxTargets,
+        maxProteins: maxTargets,
         titleSize,
         labelSize,
-        nPositionMarkers,
+        axisBreaksN: nPositionMarkers,
         showJunctions: showJunctions ? "TRUE" : "FALSE",
+        junctionColor: showJunctions ? junctionColor : "",
         highlightStart: highlightEnabled ? highlightStart : "",
         highlightEnd: highlightEnabled ? highlightEnd : "",
         highlightCol: highlightEnabled ? highlightCol : "",
@@ -354,6 +356,24 @@ export function PlotGeneTab() {
                 </p>
               </div>
             </label>
+
+            {showJunctions && (
+              <Field label="Junction Line Color">
+                <Select value={junctionColor} onValueChange={setJunctionColor}>
+                  <SelectTrigger className="h-8 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="gray40">Gray</SelectItem>
+                    <SelectItem value="black">Black</SelectItem>
+                    <SelectItem value="red">Red</SelectItem>
+                    <SelectItem value="blue">Blue</SelectItem>
+                    <SelectItem value="darkgreen">Dark Green</SelectItem>
+                    <SelectItem value="orange">Orange</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+            )}
           </div>
 
           {/* HIGHLIGHT REGION */}
