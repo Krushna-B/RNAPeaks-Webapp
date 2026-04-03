@@ -42,7 +42,7 @@ RUN R -e "install.packages(c('plumber', 'uuid'), repos='https://cloud.r-project.
 RUN R -e "library(RNAPeaks); LoadGTF(species='Human'); LoadGTF(species='Mouse')"
 
 COPY plumber.R  /app/plumber.R
-COPY nginx.conf /etc/nginx/nginx.conf
+COPY nginx.conf /etc/nginx/nginx.conf.template
 COPY start.sh   /app/start.sh
 RUN chmod +x /app/start.sh
 

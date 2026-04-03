@@ -66,6 +66,12 @@ for PORT in $(seq 7861 $((7860 + WORKERS))); do
   echo "[start.sh] Worker on port $PORT is ready (${attempts}s)"
 done
 
+# Render the nginx config template with the allowed frontend origin
+ALLOWED_ORIGIN="${ALLOWED_ORIGIN:-}" \
+  envsubst '${ALLOWED_ORIGIN}' \
+  < /etc/nginx/nginx.conf.template \
+  > /etc/nginx/nginx.conf
+
 #Start nginx in the background so the shell can handle signals
 echo "[start.sh] Starting nginx on port 7860"
 nginx -g "daemon off;" &
