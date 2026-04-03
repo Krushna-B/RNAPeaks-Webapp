@@ -66,8 +66,11 @@ for PORT in $(seq 7861 $((7860 + WORKERS))); do
   echo "[start.sh] Worker on port $PORT is ready (${attempts}s)"
 done
 
-# Render the nginx config template with the allowed frontend origin
-ALLOWED_ORIGIN="${ALLOWED_ORIGIN:-}" \
+# Render the nginx config template with the allowed frontend origin.
+# Fall back to "__disabled__" (a string that never matches a real Origin header)
+# instead of an empty string — an empty key in the nginx map block is a parse
+# error that prevents nginx from starting at all.
+ALLOWED_ORIGIN="${ALLOWED_ORIGIN:-__disabled__}" \
   envsubst '${ALLOWED_ORIGIN}' \
   < /etc/nginx/nginx.conf.template \
   > /etc/nginx/nginx.conf

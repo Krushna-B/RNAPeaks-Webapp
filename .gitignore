@@ -11,5 +11,6 @@ backend/renv/
 .DS_Store
 
 #Env
+.env
 .env*
 .env.*

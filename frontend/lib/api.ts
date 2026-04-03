@@ -106,6 +106,16 @@ export interface PlotRegionParams {
   maxPerIntron?: string
   exonCol?: string
   utrCol?: string
+  maxProteins?: string
+  titleSize?: string
+  labelSize?: string
+  axisBreaksN?: string
+  fiveToThree?: string
+  showJunctions?: string
+  junctionColor?: string
+  highlightStart?: string
+  highlightEnd?: string
+  highlightCol?: string
 }
 
 export async function runPlotRegion(params: PlotRegionParams): Promise<string> {
@@ -124,6 +134,16 @@ export async function runPlotRegion(params: PlotRegionParams): Promise<string> {
     max_per_intron: params.maxPerIntron ?? "",
     exon_col: params.exonCol ?? "",
     utr_col: params.utrCol ?? "",
+    max_proteins: params.maxProteins ?? "",
+    title_size: params.titleSize ?? "",
+    label_size: params.labelSize ?? "",
+    axis_breaks_n: params.axisBreaksN ?? "",
+    five_to_three: params.fiveToThree ?? "",
+    show_junctions: params.showJunctions ?? "",
+    junction_color: params.junctionColor ?? "",
+    highlighted_region_start: params.highlightStart ?? "",
+    highlighted_region_stop: params.highlightEnd ?? "",
+    highlighted_region_color: params.highlightCol ?? "",
   })
 }
 
@@ -137,6 +157,7 @@ export interface MapAdvancedParams {
   minCount?: string
   groups?: string        // comma-separated: "Retained,Excluded,Control"
   controlMultiplier?: string
+  controlIterations?: string
   zThreshold?: string
   minConsecutive?: string
   title?: string
@@ -158,6 +179,7 @@ function mapAdvancedToRecord(a: MapAdvancedParams): Record<string, string> {
     Min_Count: a.minCount ?? "",
     groups: a.groups ?? "",
     control_multiplier: a.controlMultiplier ?? "",
+    control_iterations: a.controlIterations ?? "",
     z_threshold: a.zThreshold ?? "",
     min_consecutive: a.minConsecutive ?? "",
     title: a.title ?? "",

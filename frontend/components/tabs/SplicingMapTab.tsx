@@ -1,24 +1,63 @@
 "use client"
 
 import { useState } from "react"
-import { SlidersHorizontal } from "lucide-react"
+import { Play } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
-  Sheet, SheetTrigger, SheetContent, SheetHeader, SheetBody, SheetTitle, SheetDescription,
-} from "@/components/ui/sheet"
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select"
 import { FileUpload } from "@/components/FileUpload"
 import { PlotResult } from "@/components/PlotResult"
 import { runSplicingMap } from "@/lib/api"
 
-function FieldRow({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+const LINE_COLOR_OPTIONS = [
+  { value: "blue", label: "Blue" },
+  { value: "red", label: "Red" },
+  { value: "black", label: "Black" },
+  { value: "navy", label: "Navy" },
+  { value: "darkgreen", label: "Dark Green" },
+  { value: "orange", label: "Orange" },
+  { value: "purple", label: "Purple" },
+  { value: "magenta", label: "Magenta" },
+  { value: "gray40", label: "Gray" },
+]
+
+const STRUCTURE_COLOR_OPTIONS = [
+  { value: "navy", label: "Navy" },
+  { value: "black", label: "Black" },
+  { value: "blue", label: "Blue" },
+  { value: "darkgreen", label: "Dark Green" },
+  { value: "red", label: "Red" },
+  { value: "gray40", label: "Gray" },
+  { value: "dark gray", label: "Dark Gray" },
+  { value: "orange", label: "Orange" },
+  { value: "purple", label: "Purple" },
+]
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-2.5 pt-1">
+      <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground/60 whitespace-nowrap">
+        {children}
+      </span>
+      <div className="h-px flex-1 bg-border/60" />
+    </div>
+  )
+}
+
+function Field({
+  label, hint, children,
+}: {
+  label: string; hint?: string; children: React.ReactNode
+}) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-sm">{label}</Label>
+      <Label className="text-xs font-medium leading-none">{label}</Label>
       {children}
-      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+      {hint && <p className="text-[11px] leading-snug text-muted-foreground">{hint}</p>}
     </div>
   )
 }
@@ -28,28 +67,37 @@ const ALL_GROUPS = ["Retained", "Excluded", "Control"] as const
 export function SplicingMapTab() {
   const [bedUploadId, setBedUploadId] = useState<string | null>(null)
   const [matsUploadId, setMatsUploadId] = useState<string | null>(null)
+
+  // Main params
   const [widthIntoExon, setWidthIntoExon] = useState("50")
   const [widthIntoIntron, setWidthIntoIntron] = useState("300")
   const [movingAverage, setMovingAverage] = useState("50")
 
-  // Advanced
+  // Statistical filters
   const [pValueRetainedExclusion, setPValueRetainedExclusion] = useState("0.05")
   const [pValueControls, setPValueControls] = useState("0.95")
   const [retainedIncLevelDiff, setRetainedIncLevelDiff] = useState("0.1")
   const [exclusionIncLevelDiff, setExclusionIncLevelDiff] = useState("-0.1")
   const [minCount, setMinCount] = useState("50")
   const [groups, setGroups] = useState<string[]>(["Retained", "Excluded", "Control"])
+
+  // Control sampling
   const [controlMultiplier, setControlMultiplier] = useState("2")
+  const [controlIterations, setControlIterations] = useState("20")
+
+  // Significance
   const [zThreshold, setZThreshold] = useState("1.96")
   const [minConsecutive, setMinConsecutive] = useState("10")
+
+  // Appearance
   const [title, setTitle] = useState("")
+  const [titleSize, setTitleSize] = useState("20")
+  const [axisTextSize, setAxisTextSize] = useState("11")
+  const [lineWidth, setLineWidth] = useState("0.8")
   const [retainedCol, setRetainedCol] = useState("blue")
   const [excludedCol, setExcludedCol] = useState("red")
   const [controlCol, setControlCol] = useState("black")
   const [exonCol, setExonCol] = useState("navy")
-  const [lineWidth, setLineWidth] = useState("0.8")
-  const [axisTextSize, setAxisTextSize] = useState("11")
-  const [titleSize, setTitleSize] = useState("20")
 
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -72,7 +120,7 @@ export function SplicingMapTab() {
         pValueRetainedExclusion, pValueControls,
         retainedIncLevelDiff, exclusionIncLevelDiff,
         minCount, groups: groups.join(","),
-        controlMultiplier, zThreshold, minConsecutive,
+        controlMultiplier, controlIterations, zThreshold, minConsecutive,
         title, retainedCol, excludedCol, controlCol, exonCol,
         lineWidth, axisTextSize, titleSize,
       })
@@ -88,16 +136,25 @@ export function SplicingMapTab() {
 
   return (
     <div className="flex h-full">
+      {/* ── Sidebar ── */}
       <form
-        className="flex h-full w-[300px] shrink-0 flex-col overflow-hidden border-r bg-muted/20"
+        className="flex h-full w-[320px] shrink-0 flex-col overflow-hidden border-r bg-muted/20"
         onSubmit={(e) => { e.preventDefault(); if (canRun) handleRun() }}
-        onKeyDown={(e) => { if (e.key === "Enter" && !e.defaultPrevented && canRun) { e.preventDefault(); handleRun() } }}
       >
-        <div className="px-5 py-4 border-b">
-          <p className="text-sm font-medium">Splicing Map</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Peak density around splicing events</p>
+        {/* Header */}
+        <div className="border-b px-5 py-3.5">
+          <p className="text-sm font-semibold tracking-tight">Splicing Map</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Peak density around splicing events
+          </p>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 space-y-4">
+
+        {/* Scrollable body */}
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+
+          {/* DATA FILES */}
+          <SectionLabel>Data Files</SectionLabel>
+
           <FileUpload
             label="BED File"
             accept=".bed"
@@ -112,133 +169,253 @@ export function SplicingMapTab() {
             onClear={() => setMatsUploadId(null)}
           />
 
+          {/* PARAMETERS */}
+          <SectionLabel>Parameters</SectionLabel>
+
           <div className="grid grid-cols-2 gap-3">
-            <FieldRow label="Width Into Exon (bp)">
-              <Input type="number" value={widthIntoExon} onChange={(e) => setWidthIntoExon(e.target.value)} />
-            </FieldRow>
-            <FieldRow label="Width Into Intron (bp)">
-              <Input type="number" value={widthIntoIntron} onChange={(e) => setWidthIntoIntron(e.target.value)} />
-            </FieldRow>
+            <Field label="Width Into Exon (bp)">
+              <Input
+                type="number"
+                value={widthIntoExon}
+                onChange={(e) => setWidthIntoExon(e.target.value)}
+                className="h-8 text-sm"
+              />
+            </Field>
+            <Field label="Width Into Intron (bp)">
+              <Input
+                type="number"
+                value={widthIntoIntron}
+                onChange={(e) => setWidthIntoIntron(e.target.value)}
+                className="h-8 text-sm"
+              />
+            </Field>
           </div>
 
-          <FieldRow label="Moving Average Window">
-            <Input type="number" value={movingAverage} onChange={(e) => setMovingAverage(e.target.value)} />
-          </FieldRow>
+          <Field label="Moving Average Window">
+            <Input
+              type="number"
+              value={movingAverage}
+              onChange={(e) => setMovingAverage(e.target.value)}
+              className="h-8 text-sm"
+            />
+          </Field>
+
+          {/* EVENT GROUPS */}
+          <SectionLabel>Event Groups</SectionLabel>
+
+          <div className="flex gap-4">
+            {ALL_GROUPS.map((g) => (
+              <label key={g} className="flex items-center gap-1.5 cursor-pointer">
+                <Checkbox
+                  checked={groups.includes(g)}
+                  onCheckedChange={() => toggleGroup(g)}
+                />
+                <span className="text-sm">{g}</span>
+              </label>
+            ))}
+          </div>
+
+          {/* STATISTICAL FILTERS */}
+          <SectionLabel>Statistical Filters</SectionLabel>
+
+          <Field label="p-value (Retained / Excluded)">
+            <Input
+              type="number"
+              min="0" max="1" step="0.01"
+              value={pValueRetainedExclusion}
+              onChange={(e) => setPValueRetainedExclusion(e.target.value)}
+              className="h-8 text-sm"
+            />
+          </Field>
+
+          <Field label="p-value (Controls)">
+            <Input
+              type="number"
+              min="0" max="1" step="0.01"
+              value={pValueControls}
+              onChange={(e) => setPValueControls(e.target.value)}
+              className="h-8 text-sm"
+            />
+          </Field>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Retained ΔInc">
+              <Input
+                type="number"
+                step="0.05"
+                value={retainedIncLevelDiff}
+                onChange={(e) => setRetainedIncLevelDiff(e.target.value)}
+                className="h-8 text-sm"
+              />
+            </Field>
+            <Field label="Excluded ΔInc">
+              <Input
+                type="number"
+                step="0.05"
+                value={exclusionIncLevelDiff}
+                onChange={(e) => setExclusionIncLevelDiff(e.target.value)}
+                className="h-8 text-sm"
+              />
+            </Field>
+          </div>
+
+          <Field label="Min Read Count">
+            <Input
+              type="number"
+              min="1"
+              value={minCount}
+              onChange={(e) => setMinCount(e.target.value)}
+              className="h-8 text-sm"
+            />
+          </Field>
+
+          {/* CONTROL SAMPLING */}
+          <SectionLabel>Control Sampling</SectionLabel>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Multiplier">
+              <Input
+                type="number"
+                min="0.1" step="0.1"
+                value={controlMultiplier}
+                onChange={(e) => setControlMultiplier(e.target.value)}
+                className="h-8 text-sm"
+              />
+            </Field>
+            <Field label="Iterations">
+              <Input
+                type="number"
+                min="5" step="5"
+                value={controlIterations}
+                onChange={(e) => setControlIterations(e.target.value)}
+                className="h-8 text-sm"
+              />
+            </Field>
+          </div>
+
+          {/* SIGNIFICANCE */}
+          <SectionLabel>Significance</SectionLabel>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Z Threshold">
+              <Input
+                type="number"
+                step="0.1"
+                value={zThreshold}
+                onChange={(e) => setZThreshold(e.target.value)}
+                className="h-8 text-sm"
+              />
+            </Field>
+            <Field label="Min Consecutive">
+              <Input
+                type="number"
+                min="1"
+                value={minConsecutive}
+                onChange={(e) => setMinConsecutive(e.target.value)}
+                className="h-8 text-sm"
+              />
+            </Field>
+          </div>
+
+          {/* APPEARANCE */}
+          <SectionLabel>Appearance</SectionLabel>
+
+          <Field label="Plot Title">
+            <Input
+              placeholder="Optional title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="h-8 text-sm"
+            />
+          </Field>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Title Size (pt)">
+              <Input
+                type="number"
+                min="8"
+                value={titleSize}
+                onChange={(e) => setTitleSize(e.target.value)}
+                className="h-8 text-sm"
+              />
+            </Field>
+            <Field label="Axis Text Size (pt)">
+              <Input
+                type="number"
+                min="6"
+                value={axisTextSize}
+                onChange={(e) => setAxisTextSize(e.target.value)}
+                className="h-8 text-sm"
+              />
+            </Field>
+          </div>
+
+          <Field label="Line Width">
+            <Input
+              type="number"
+              min="0.1" step="0.1"
+              value={lineWidth}
+              onChange={(e) => setLineWidth(e.target.value)}
+              className="h-8 text-sm"
+            />
+          </Field>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Retained Color">
+              <Select value={retainedCol} onValueChange={setRetainedCol}>
+                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {LINE_COLOR_OPTIONS.map((c) => (
+                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Excluded Color">
+              <Select value={excludedCol} onValueChange={setExcludedCol}>
+                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {LINE_COLOR_OPTIONS.map((c) => (
+                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Control Color">
+              <Select value={controlCol} onValueChange={setControlCol}>
+                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {LINE_COLOR_OPTIONS.map((c) => (
+                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Exon Color">
+              <Select value={exonCol} onValueChange={setExonCol}>
+                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {STRUCTURE_COLOR_OPTIONS.map((c) => (
+                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
+
         </div>
 
-        <div className="px-5 py-4 border-t flex gap-2">
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button type="button" variant="outline" size="sm" className="gap-1.5 shrink-0">
-                <SlidersHorizontal className="h-3.5 w-3.5" />
-                Advanced
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="right">
-              <SheetHeader>
-                <SheetTitle>Advanced Settings</SheetTitle>
-                <SheetDescription>Statistical thresholds and visual styling</SheetDescription>
-              </SheetHeader>
-              <SheetBody className="space-y-5">
-                <div className="space-y-2">
-                  <Label className="text-sm">Event Groups</Label>
-                  <div className="flex gap-4">
-                    {ALL_GROUPS.map((g) => (
-                      <label key={g} className="flex items-center gap-1.5 text-sm cursor-pointer">
-                        <Checkbox
-                          checked={groups.includes(g)}
-                          onCheckedChange={() => toggleGroup(g)}
-                        />
-                        {g}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="border-t pt-4 space-y-5">
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Statistical Filters</p>
-
-                  <FieldRow label="p-value (Retained / Excluded)" hint="Max p-value for retained/excluded events">
-                    <Input type="number" min="0" max="1" step="0.01" value={pValueRetainedExclusion} onChange={(e) => setPValueRetainedExclusion(e.target.value)} />
-                  </FieldRow>
-
-                  <FieldRow label="p-value (Controls)" hint="Min p-value for control events">
-                    <Input type="number" min="0" max="1" step="0.01" value={pValueControls} onChange={(e) => setPValueControls(e.target.value)} />
-                  </FieldRow>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <FieldRow label="Retained ΔInc" hint="Min inclusion level difference">
-                      <Input type="number" step="0.05" value={retainedIncLevelDiff} onChange={(e) => setRetainedIncLevelDiff(e.target.value)} />
-                    </FieldRow>
-                    <FieldRow label="Excluded ΔInc" hint="Max (negative) inclusion difference">
-                      <Input type="number" step="0.05" value={exclusionIncLevelDiff} onChange={(e) => setExclusionIncLevelDiff(e.target.value)} />
-                    </FieldRow>
-                  </div>
-
-                  <FieldRow label="Min Read Count">
-                    <Input type="number" min="1" value={minCount} onChange={(e) => setMinCount(e.target.value)} />
-                  </FieldRow>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <FieldRow label="Control Multiplier">
-                      <Input type="number" min="0.1" step="0.5" value={controlMultiplier} onChange={(e) => setControlMultiplier(e.target.value)} />
-                    </FieldRow>
-                    <FieldRow label="Z Threshold">
-                      <Input type="number" step="0.1" value={zThreshold} onChange={(e) => setZThreshold(e.target.value)} />
-                    </FieldRow>
-                  </div>
-
-                  <FieldRow label="Min Consecutive Positions">
-                    <Input type="number" min="1" value={minConsecutive} onChange={(e) => setMinConsecutive(e.target.value)} />
-                  </FieldRow>
-                </div>
-
-                <div className="border-t pt-4 space-y-5">
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Appearance</p>
-
-                  <FieldRow label="Plot Title">
-                    <Input placeholder="Optional title" value={title} onChange={(e) => setTitle(e.target.value)} />
-                  </FieldRow>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <FieldRow label="Title Size (pt)">
-                      <Input type="number" min="8" value={titleSize} onChange={(e) => setTitleSize(e.target.value)} />
-                    </FieldRow>
-                    <FieldRow label="Axis Text Size (pt)">
-                      <Input type="number" min="6" value={axisTextSize} onChange={(e) => setAxisTextSize(e.target.value)} />
-                    </FieldRow>
-                  </div>
-
-                  <FieldRow label="Line Width">
-                    <Input type="number" min="0.1" step="0.1" value={lineWidth} onChange={(e) => setLineWidth(e.target.value)} />
-                  </FieldRow>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <FieldRow label="Retained Color">
-                      <Input value={retainedCol} onChange={(e) => setRetainedCol(e.target.value)} />
-                    </FieldRow>
-                    <FieldRow label="Excluded Color">
-                      <Input value={excludedCol} onChange={(e) => setExcludedCol(e.target.value)} />
-                    </FieldRow>
-                    <FieldRow label="Control Color">
-                      <Input value={controlCol} onChange={(e) => setControlCol(e.target.value)} />
-                    </FieldRow>
-                    <FieldRow label="Exon Color">
-                      <Input value={exonCol} onChange={(e) => setExonCol(e.target.value)} />
-                    </FieldRow>
-                  </div>
-                </div>
-              </SheetBody>
-            </SheetContent>
-          </Sheet>
-
-          <Button type="submit" disabled={!canRun} className="flex-1">
+        {/* Run button */}
+        <div className="border-t px-5 py-4">
+          <Button type="submit" disabled={!canRun} className="w-full gap-1.5" size="sm">
+            <Play className="h-3 w-3" />
             {loading ? "Running…" : "Run Splicing Map"}
           </Button>
         </div>
       </form>
 
-      <div className="flex-1 overflow-hidden flex flex-col min-h-0 p-6">
+      {/* ── Plot area ── */}
+      <div className="flex flex-1 flex-col overflow-hidden p-6">
         <PlotResult imageUrl={imageUrl} loading={loading} error={error} jobKind="splicing" />
       </div>
     </div>
