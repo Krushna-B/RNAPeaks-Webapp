@@ -36,8 +36,8 @@ RUN R -e " \
 # Install BSgenome packages at build time
 RUN R -e "BiocManager::install(c('BSgenome.Hsapiens.UCSC.hg38', 'BSgenome.Mmusculus.UCSC.mm10'), ask=FALSE)"
 
-# Install plumber and uuid
-RUN R -e "install.packages(c('plumber', 'uuid'), repos='https://cloud.r-project.org'); library(plumber)"
+# Install plumber, uuid, and digest (digest::hmac used to verify upload tokens)
+RUN R -e "install.packages(c('plumber', 'uuid', 'digest'), repos='https://cloud.r-project.org'); library(plumber)"
 
 # Pre-cache the GTF at build time so cold starts don't need to download it
 RUN R -e "library(RNAPeaks); LoadGTF(species='Human'); LoadGTF(species='Mouse')"

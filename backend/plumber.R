@@ -2,6 +2,7 @@ suppressPackageStartupMessages({
   library(RNAPeaks)
   library(ggplot2)
   library(uuid)
+  library(digest)
   library(BSgenome.Hsapiens.UCSC.hg38)
 })
 
@@ -113,7 +114,46 @@ function(req, res) {
   }
 
   auth_header <- req$HTTP_AUTHORIZATION
-  if (is.null(auth_header) || auth_header != paste("Bearer", secret)) {
+  if (is.null(auth_header) || !startsWith(auth_header, "Bearer ")) {
+    log_error("Unauthorized from ", req$REMOTE_ADDR, " -> ", req$PATH_INFO)
+    res$status <- 401
+    return(list(error = "Unauthorized"))
+  }
+  token <- substring(auth_header, 8L) # strip "Bearer "
+
+  # /upload accepts a short-lived HMAC upload token minted by the Next.js server.
+  # Token format: "<sessionNonce>|<expiryUnixSecs>|<hmac-sha256-hex>"
+  # HF recomputes the HMAC using its own copy of HF_SECRET_TOKEN and rejects
+  # anything expired or tampered with.
+  if (req$PATH_INFO == "/upload") {
+    parts <- strsplit(token, "\\|", fixed = FALSE)[[1]]
+    if (length(parts) != 3L) {
+      res$status <- 401
+      return(list(error = "Unauthorized"))
+    }
+    nonce <- parts[1]
+    expiry <- suppressWarnings(as.integer(parts[2]))
+    sig <- parts[3]
+
+    if (is.na(expiry) || as.integer(Sys.time()) > expiry) {
+      res$status <- 401
+      return(list(error = "Upload token expired"))
+    }
+
+    payload <- paste(nonce, parts[2], sep = "|")
+    expected_sig <- digest::hmac(key = secret, object = payload, algo = "sha256", serialize = FALSE)
+
+    if (!identical(sig, expected_sig)) {
+      log_error("Invalid upload token from ", req$REMOTE_ADDR)
+      res$status <- 401
+      return(list(error = "Unauthorized"))
+    }
+
+    return(plumber::forward())
+  }
+
+  # All other endpoints: exact match against the static HF_SECRET_TOKEN
+  if (token != secret) {
     log_error("Unauthorized from ", req$REMOTE_ADDR, " -> ", req$PATH_INFO)
     res$status <- 401
     return(list(error = "Unauthorized"))

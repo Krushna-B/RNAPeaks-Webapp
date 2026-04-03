@@ -1,19 +1,43 @@
 import { getSessionToken } from "@/lib/session"
 import { friendlyError } from "@/lib/errors"
 
+interface UploadCredentials {
+  token: string
+  sessionId: string
+  url: string
+}
+
+// Step 1: Ask the Next.js server for a short-lived upload token.
+// The server verifies the session and mints an HMAC token without
+// ever exposing HF_SECRET_TOKEN to the browser.
+async function getUploadCredentials(): Promise<UploadCredentials> {
+  const sessionToken = await getSessionToken()
+  const res = await fetch("/api/upload-token", {
+    headers: { "X-Session-Token": sessionToken },
+  })
+  if (!res.ok) {
+    throw new Error("Could not get upload credentials. Please refresh and try again.")
+  }
+  return res.json()
+}
+
+// Step 2: POST the file directly to HF Space — Vercel is not in this path,
+// so there is no body size limit. Progress reporting works the same way
+// because we still use XHR.
 export async function uploadFile(
   file: File,
   onProgress: (pct: number) => void
 ): Promise<string> {
-  const sessionToken = await getSessionToken()
+  const { token, sessionId, url } = await getUploadCredentials()
 
   return new Promise((resolve, reject) => {
     const form = new FormData()
     form.append("file", file, file.name)
 
     const xhr = new XMLHttpRequest()
-    xhr.open("POST", "/api/upload")
-    xhr.setRequestHeader("X-Session-Token", sessionToken)
+    xhr.open("POST", url)
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`)
+    xhr.setRequestHeader("X-Session-ID", sessionId)
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) {
@@ -38,7 +62,8 @@ export async function uploadFile(
       }
     }
 
-    xhr.onerror = () => reject(new Error("Could not reach the server. Please check your connection and try again."))
+    xhr.onerror = () =>
+      reject(new Error("Could not reach the server. Please check your connection and try again."))
     xhr.send(form)
   })
 }
