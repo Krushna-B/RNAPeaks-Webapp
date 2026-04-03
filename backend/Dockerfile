@@ -19,6 +19,7 @@ RUN apt-get update && apt-get install -y \
   zlib1g-dev \
   nginx \
   curl \
+  gettext-base \
   && rm -rf /var/lib/apt/lists/*
 
 # Install BiocManager + core dependencies

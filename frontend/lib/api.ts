@@ -52,11 +52,12 @@ export interface PlotGeneParams {
   merge?: string
   totalArrows?: string
   maxPerIntron?: string
-  maxTargets?: string
+  maxProteins?: string
   titleSize?: string
   labelSize?: string
-  nPositionMarkers?: string
+  axisBreaksN?: string
   showJunctions?: string
+  junctionColor?: string
   highlightStart?: string
   highlightEnd?: string
   highlightCol?: string
@@ -75,14 +76,15 @@ export async function runPlotGene(params: PlotGeneParams): Promise<string> {
     merge: params.merge ?? "",
     total_arrows: params.totalArrows ?? "",
     max_per_intron: params.maxPerIntron ?? "",
-    max_targets: params.maxTargets ?? "",
+    max_proteins: params.maxProteins ?? "",
     title_size: params.titleSize ?? "",
     label_size: params.labelSize ?? "",
-    n_position_markers: params.nPositionMarkers ?? "",
+    axis_breaks_n: params.axisBreaksN ?? "",
     show_junctions: params.showJunctions ?? "",
-    highlight_start: params.highlightStart ?? "",
-    highlight_end: params.highlightEnd ?? "",
-    highlight_col: params.highlightCol ?? "",
+    junction_color: params.junctionColor ?? "",
+    highlighted_region_start: params.highlightStart ?? "",
+    highlighted_region_stop: params.highlightEnd ?? "",
+    highlighted_region_color: params.highlightCol ?? "",
   })
 }
 

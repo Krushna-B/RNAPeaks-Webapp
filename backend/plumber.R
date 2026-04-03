@@ -244,7 +244,7 @@ function(req, upload_id, geneID, species = "Human", peak_col = "purple",
          TxID = NULL, merge = NULL, total_arrows = NULL, max_per_intron = NULL,
          gtf_upload_id = NULL, max_proteins = 40,
          title_size = NULL, label_size = NULL, axis_breaks_n = NULL,
-         show_junctions = NULL,
+         show_junctions = NULL, junction_color = NULL,
          highlighted_region_start = NULL, highlighted_region_stop = NULL, highlighted_region_color = NULL) {
   log_info("plot-gene session=", req$session_id, " geneID=", geneID)
   tryCatch(
@@ -293,6 +293,7 @@ function(req, upload_id, geneID, species = "Human", peak_col = "purple",
         label_size = opt_num(label_size, 5),
         axis_breaks_n = opt_int(axis_breaks_n, 5),
         show_junctions = isTRUE(as.logical(opt_str(show_junctions, "FALSE"))),
+        junction_color = opt_str(junction_color, "gray40"),
         highlighted_region_start = opt_int(highlighted_region_start, NULL),
         highlighted_region_stop = opt_int(highlighted_region_stop, NULL),
         highlighted_region_color = opt_str(highlighted_region_color, NULL),
