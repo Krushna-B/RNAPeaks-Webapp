@@ -32,7 +32,7 @@ const COLOR_OPTIONS = [
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-2.5 pt-1">
-      <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground/60 whitespace-nowrap">
+      <span className="text-[10px] font-bold tracking-[0.1em] whitespace-nowrap text-muted-foreground/60 uppercase">
         {children}
       </span>
       <div className="h-px flex-1 bg-border/60" />
@@ -53,7 +53,7 @@ function Field({
 }) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs font-medium leading-none">
+      <Label className="text-xs leading-none font-medium">
         {label}
         {required && <span className="ml-0.5 text-destructive">*</span>}
       </Label>
@@ -162,7 +162,6 @@ export function PlotGeneTab() {
 
         {/* Scrollable body */}
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
-
           {/* DATA FILES */}
           <SectionLabel>Data Files</SectionLabel>
 
@@ -206,7 +205,10 @@ export function PlotGeneTab() {
             />
           </Field>
 
-          <Field label="Transcript ID" hint="Leave blank to show all transcripts">
+          <Field
+            label="Transcript ID"
+            hint="Leave blank to show all transcripts"
+          >
             <Input
               placeholder="e.g. ENST00000123456"
               value={txID}
@@ -226,7 +228,6 @@ export function PlotGeneTab() {
               <SelectContent>
                 <SelectItem value="Target">Alphabetically</SelectItem>
                 <SelectItem value="Count">Peak Count</SelectItem>
-                <SelectItem value="Region">Genomic Region</SelectItem>
               </SelectContent>
             </Select>
           </Field>
@@ -285,7 +286,7 @@ export function PlotGeneTab() {
             <Field label="Label Size (pt)">
               <Input
                 type="number"
-                min="6"
+                min="1"
                 max="24"
                 value={labelSize}
                 onChange={(e) => setLabelSize(e.target.value)}
@@ -336,7 +337,9 @@ export function PlotGeneTab() {
                 className="mt-0.5"
               />
               <div>
-                <p className="text-sm font-medium leading-none">Orient 5′ → 3′</p>
+                <p className="text-sm leading-none font-medium">
+                  Orient 5′ → 3′
+                </p>
                 <p className="mt-1 text-[11px] text-muted-foreground">
                   Display in transcription direction
                 </p>
@@ -350,7 +353,9 @@ export function PlotGeneTab() {
                 className="mt-0.5"
               />
               <div>
-                <p className="text-sm font-medium leading-none">Show Junction Lines</p>
+                <p className="text-sm leading-none font-medium">
+                  Show Junction Lines
+                </p>
                 <p className="mt-1 text-[11px] text-muted-foreground">
                   Draw exon/intron boundary markers
                 </p>
@@ -385,7 +390,9 @@ export function PlotGeneTab() {
                 checked={highlightEnabled}
                 onCheckedChange={(v) => setHighlightEnabled(v === true)}
               />
-              <p className="text-sm font-medium leading-none">Enable Region Highlight</p>
+              <p className="text-sm leading-none font-medium">
+                Enable Region Highlight
+              </p>
             </label>
 
             {highlightEnabled && (
@@ -427,12 +434,16 @@ export function PlotGeneTab() {
               </div>
             )}
           </div>
-
         </div>
 
         {/* Run button */}
         <div className="border-t px-5 py-4">
-          <Button type="submit" disabled={!canRun} className="w-full gap-1.5" size="sm">
+          <Button
+            type="submit"
+            disabled={!canRun}
+            className="w-full gap-1.5"
+            size="sm"
+          >
             <Play className="h-3 w-3" />
             {loading ? "Running…" : "Run PlotGene"}
           </Button>
@@ -441,7 +452,12 @@ export function PlotGeneTab() {
 
       {/* ── Plot area ── */}
       <div className="flex flex-1 flex-col overflow-hidden p-6">
-        <PlotResult imageUrl={imageUrl} loading={loading} error={error} jobKind="gene" />
+        <PlotResult
+          imageUrl={imageUrl}
+          loading={loading}
+          error={error}
+          jobKind="gene"
+        />
       </div>
     </div>
   )

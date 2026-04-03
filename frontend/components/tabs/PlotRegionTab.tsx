@@ -1,56 +1,119 @@
 "use client"
 
 import { useState } from "react"
-import { SlidersHorizontal } from "lucide-react"
+import { Play } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
-  Sheet, SheetTrigger, SheetContent, SheetHeader, SheetBody, SheetTitle, SheetDescription,
-} from "@/components/ui/sheet"
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { FileUpload } from "@/components/FileUpload"
 import { PlotResult } from "@/components/PlotResult"
 import { runPlotRegion } from "@/lib/api"
 
 const COLOR_OPTIONS = [
-  { value: "blue", label: "Blue" },
   { value: "purple", label: "Purple" },
+  { value: "blue", label: "Blue" },
   { value: "red", label: "Red" },
   { value: "navy", label: "Navy" },
   { value: "orange", label: "Orange" },
   { value: "darkgreen", label: "Dark Green" },
+  { value: "magenta", label: "Magenta" },
   { value: "black", label: "Black" },
   { value: "gray", label: "Gray" },
 ]
 
-function FieldRow({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+const STRUCTURE_COLOR_OPTIONS = [
+  { value: "black", label: "Black" },
+  { value: "navy", label: "Navy" },
+  { value: "blue", label: "Blue" },
+  { value: "darkgreen", label: "Dark Green" },
+  { value: "red", label: "Red" },
+  { value: "gray40", label: "Gray" },
+  { value: "dark gray", label: "Dark Gray" },
+  { value: "orange", label: "Orange" },
+  { value: "purple", label: "Purple" },
+]
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-2.5 pt-1">
+      <span className="text-[10px] font-bold tracking-[0.1em] whitespace-nowrap text-muted-foreground/60 uppercase">
+        {children}
+      </span>
+      <div className="h-px flex-1 bg-border/60" />
+    </div>
+  )
+}
+
+function Field({
+  label,
+  hint,
+  required,
+  children,
+}: {
+  label: string
+  hint?: string
+  required?: boolean
+  children: React.ReactNode
+}) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-sm">{label}</Label>
+      <Label className="text-xs leading-none font-medium">
+        {label}
+        {required && <span className="ml-0.5 text-destructive">*</span>}
+      </Label>
       {children}
-      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+      {hint && (
+        <p className="text-[11px] leading-snug text-muted-foreground">{hint}</p>
+      )}
     </div>
   )
 }
 
 export function PlotRegionTab() {
+  // Required
   const [uploadId, setUploadId] = useState<string | null>(null)
   const [chr, setChr] = useState("")
   const [start, setStart] = useState("")
   const [end, setEnd] = useState("")
   const [strand, setStrand] = useState("+")
-  const [peakCol, setPeakCol] = useState("blue")
-  const [orderBy, setOrderBy] = useState("Count")
 
-  // Advanced
+  // Peak options
+  const [orderBy, setOrderBy] = useState("Target")
+  const [peakCol, setPeakCol] = useState("purple")
+  const [merge, setMerge] = useState("0")
+  const [maxProteins, setMaxProteins] = useState("40")
+
+  // Target
   const [geneID, setGeneID] = useState("")
   const [txID, setTxID] = useState("")
-  const [merge, setMerge] = useState("0")
+
+  // Appearance
+  const [titleSize, setTitleSize] = useState("25")
+  const [labelSize, setLabelSize] = useState("5")
+  const [axisBreaksN, setAxisBreaksN] = useState("5")
   const [totalArrows, setTotalArrows] = useState("12")
   const [maxPerIntron, setMaxPerIntron] = useState("5")
   const [exonCol, setExonCol] = useState("black")
   const [utrCol, setUtrCol] = useState("dark gray")
+
+  // Options
+  const [fiveToThree, setFiveToThree] = useState(false)
+  const [showJunctions, setShowJunctions] = useState(false)
+  const [junctionColor, setJunctionColor] = useState("gray40")
+
+  // Highlight
+  const [highlightEnabled, setHighlightEnabled] = useState(false)
+  const [highlightStart, setHighlightStart] = useState("")
+  const [highlightEnd, setHighlightEnd] = useState("")
+  const [highlightCol, setHighlightCol] = useState("pink")
 
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -63,8 +126,30 @@ export function PlotRegionTab() {
     setImageUrl(null)
     try {
       const url = await runPlotRegion({
-        uploadId, chr, start, end, strand, peakCol, orderBy,
-        geneID, txID, merge, totalArrows, maxPerIntron, exonCol, utrCol,
+        uploadId,
+        chr,
+        start,
+        end,
+        strand,
+        peakCol,
+        orderBy,
+        geneID,
+        txID,
+        merge,
+        totalArrows,
+        maxPerIntron,
+        exonCol,
+        utrCol,
+        maxProteins,
+        titleSize,
+        labelSize,
+        axisBreaksN,
+        fiveToThree: fiveToThree ? "TRUE" : "FALSE",
+        showJunctions: showJunctions ? "TRUE" : "FALSE",
+        junctionColor: showJunctions ? junctionColor : "",
+        highlightStart: highlightEnabled ? highlightStart : "",
+        highlightEnd: highlightEnabled ? highlightEnd : "",
+        highlightCol: highlightEnabled ? highlightCol : "",
       })
       setImageUrl(url)
     } catch (e) {
@@ -78,16 +163,27 @@ export function PlotRegionTab() {
 
   return (
     <div className="flex h-full">
+      {/* ── Sidebar ── */}
       <form
-        className="flex h-full w-[300px] shrink-0 flex-col overflow-hidden border-r bg-muted/20"
-        onSubmit={(e) => { e.preventDefault(); if (canRun) handleRun() }}
-        onKeyDown={(e) => { if (e.key === "Enter" && !e.defaultPrevented && canRun) { e.preventDefault(); handleRun() } }}
+        className="flex h-full w-[320px] shrink-0 flex-col overflow-hidden border-r bg-muted/20"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (canRun) handleRun()
+        }}
       >
-        <div className="px-5 py-4 border-b">
-          <p className="text-sm font-medium">Plot Region</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Visualize peaks in a genomic coordinate range</p>
+        {/* Header */}
+        <div className="border-b px-5 py-3.5">
+          <p className="text-sm font-semibold tracking-tight">Plot Region</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Visualize RNA-binding peaks in a genomic coordinate range
+          </p>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 space-y-4">
+
+        {/* Scrollable body */}
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+          {/* DATA FILE */}
+          <SectionLabel>Data File</SectionLabel>
+
           <FileUpload
             label="BED File"
             accept=".bed"
@@ -95,115 +191,350 @@ export function PlotRegionTab() {
             onClear={() => setUploadId(null)}
           />
 
+          {/* REGION */}
+          <SectionLabel>Region</SectionLabel>
+
+          <Field label="Chromosome" required>
+            <Input
+              placeholder="e.g. chr1"
+              value={chr}
+              onChange={(e) => setChr(e.target.value)}
+              className="h-8 text-sm"
+            />
+          </Field>
+
           <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
-              <FieldRow label="Chromosome">
-                <Input placeholder="e.g. chr1 or 1" value={chr} onChange={(e) => setChr(e.target.value)} />
-              </FieldRow>
-            </div>
-            <FieldRow label="Start (bp)">
-              <Input type="number" placeholder="56000000" value={start} onChange={(e) => setStart(e.target.value)} />
-            </FieldRow>
-            <FieldRow label="End (bp)">
-              <Input type="number" placeholder="56050000" value={end} onChange={(e) => setEnd(e.target.value)} />
-            </FieldRow>
+            <Field label="Start (bp)" required>
+              <Input
+                type="number"
+                placeholder="56000000"
+                value={start}
+                onChange={(e) => setStart(e.target.value)}
+                className="h-8 text-sm"
+              />
+            </Field>
+            <Field label="End (bp)" required>
+              <Input
+                type="number"
+                placeholder="56050000"
+                value={end}
+                onChange={(e) => setEnd(e.target.value)}
+                className="h-8 text-sm"
+              />
+            </Field>
           </div>
 
-          <FieldRow label="Strand">
+          <Field label="Strand">
             <Select value={strand} onValueChange={setStrand}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="+">+ (positive)</SelectItem>
                 <SelectItem value="-">- (negative)</SelectItem>
               </SelectContent>
             </Select>
-          </FieldRow>
+          </Field>
 
-          <FieldRow label="Order Tracks By">
+          {/* TARGET */}
+          <SectionLabel>Target</SectionLabel>
+
+          <Field
+            label="Gene Label"
+            hint="Optional — displays gene name on the plot"
+          >
+            <Input
+              placeholder="e.g. GAPDH"
+              value={geneID}
+              onChange={(e) => setGeneID(e.target.value)}
+              className="h-8 text-sm"
+            />
+          </Field>
+
+          <Field
+            label="Transcript ID"
+            hint="Leave blank to show all transcripts"
+          >
+            <Input
+              placeholder="e.g. ENST00000123456"
+              value={txID}
+              onChange={(e) => setTxID(e.target.value)}
+              className="h-8 font-mono text-sm"
+            />
+          </Field>
+
+          {/* PEAK OPTIONS */}
+          <SectionLabel>Peak Options</SectionLabel>
+
+          <Field label="Order By">
             <Select value={orderBy} onValueChange={setOrderBy}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Count">Peak Count</SelectItem>
                 <SelectItem value="Target">Alphabetically</SelectItem>
-                <SelectItem value="Region">Genomic Region</SelectItem>
+                <SelectItem value="Count">Peak Count</SelectItem>
               </SelectContent>
             </Select>
-          </FieldRow>
+          </Field>
 
-          <FieldRow label="Peak Color">
+          <Field label="Peak Color">
             <Select value={peakCol} onValueChange={setPeakCol}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 {COLOR_OPTIONS.map((c) => (
-                  <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                  <SelectItem key={c.value} value={c.value}>
+                    {c.label}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-          </FieldRow>
+          </Field>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Merge Peaks (bp)" hint="0 = off">
+              <Input
+                type="number"
+                min="0"
+                value={merge}
+                onChange={(e) => setMerge(e.target.value)}
+                className="h-8 text-sm"
+              />
+            </Field>
+            <Field label="Max Proteins">
+              <Input
+                type="number"
+                min="1"
+                value={maxProteins}
+                onChange={(e) => setMaxProteins(e.target.value)}
+                className="h-8 text-sm"
+              />
+            </Field>
+          </div>
+
+          {/* APPEARANCE */}
+          <SectionLabel>Appearance</SectionLabel>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Title Size (pt)">
+              <Input
+                type="number"
+                min="6"
+                max="40"
+                value={titleSize}
+                onChange={(e) => setTitleSize(e.target.value)}
+                className="h-8 text-sm"
+              />
+            </Field>
+            <Field label="Label Size (pt)">
+              <Input
+                type="number"
+                min="2"
+                max="12"
+                value={labelSize}
+                onChange={(e) => setLabelSize(e.target.value)}
+                className="h-8 text-sm"
+              />
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Position Markers">
+              <Input
+                type="number"
+                min="2"
+                value={axisBreaksN}
+                onChange={(e) => setAxisBreaksN(e.target.value)}
+                className="h-8 text-sm"
+              />
+            </Field>
+            <Field label="Total Arrows">
+              <Input
+                type="number"
+                min="0"
+                value={totalArrows}
+                onChange={(e) => setTotalArrows(e.target.value)}
+                className="h-8 text-sm"
+              />
+            </Field>
+          </div>
+
+          <Field label="Max Arrows Per Intron">
+            <Input
+              type="number"
+              min="1"
+              value={maxPerIntron}
+              onChange={(e) => setMaxPerIntron(e.target.value)}
+              className="h-8 text-sm"
+            />
+          </Field>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Exon Color">
+              <Select value={exonCol} onValueChange={setExonCol}>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STRUCTURE_COLOR_OPTIONS.map((c) => (
+                    <SelectItem key={c.value} value={c.value}>
+                      {c.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="UTR Color">
+              <Select value={utrCol} onValueChange={setUtrCol}>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STRUCTURE_COLOR_OPTIONS.map((c) => (
+                    <SelectItem key={c.value} value={c.value}>
+                      {c.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
+
+          {/* OPTIONS */}
+          <SectionLabel>Options</SectionLabel>
+
+          <div className="space-y-3">
+            <label className="flex cursor-pointer items-start gap-3">
+              <Checkbox
+                checked={fiveToThree}
+                onCheckedChange={(v) => setFiveToThree(v === true)}
+                className="mt-0.5"
+              />
+              <div>
+                <p className="text-sm leading-none font-medium">
+                  Orient 5′ → 3′
+                </p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Display in transcription direction
+                </p>
+              </div>
+            </label>
+
+            <label className="flex cursor-pointer items-start gap-3">
+              <Checkbox
+                checked={showJunctions}
+                onCheckedChange={(v) => setShowJunctions(v === true)}
+                className="mt-0.5"
+              />
+              <div>
+                <p className="text-sm leading-none font-medium">
+                  Show Junction Lines
+                </p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Draw exon/intron boundary markers
+                </p>
+              </div>
+            </label>
+
+            {showJunctions && (
+              <Field label="Junction Line Color">
+                <Select value={junctionColor} onValueChange={setJunctionColor}>
+                  <SelectTrigger className="h-8 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="gray40">Gray</SelectItem>
+                    <SelectItem value="black">Black</SelectItem>
+                    <SelectItem value="red">Red</SelectItem>
+                    <SelectItem value="blue">Blue</SelectItem>
+                    <SelectItem value="darkgreen">Dark Green</SelectItem>
+                    <SelectItem value="orange">Orange</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+            )}
+          </div>
+
+          {/* HIGHLIGHT REGION */}
+          <SectionLabel>Highlight Region</SectionLabel>
+
+          <div className="space-y-3">
+            <label className="flex cursor-pointer items-center gap-3">
+              <Checkbox
+                checked={highlightEnabled}
+                onCheckedChange={(v) => setHighlightEnabled(v === true)}
+              />
+              <p className="text-sm leading-none font-medium">
+                Enable Region Highlight
+              </p>
+            </label>
+
+            {highlightEnabled && (
+              <div className="space-y-3 rounded-md border bg-muted/30 p-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Start (bp)">
+                    <Input
+                      type="number"
+                      placeholder="e.g. 100"
+                      value={highlightStart}
+                      onChange={(e) => setHighlightStart(e.target.value)}
+                      className="h-8 text-sm"
+                    />
+                  </Field>
+                  <Field label="End (bp)">
+                    <Input
+                      type="number"
+                      placeholder="e.g. 500"
+                      value={highlightEnd}
+                      onChange={(e) => setHighlightEnd(e.target.value)}
+                      className="h-8 text-sm"
+                    />
+                  </Field>
+                </div>
+                <Field label="Highlight Color">
+                  <Select value={highlightCol} onValueChange={setHighlightCol}>
+                    <SelectTrigger className="h-8 text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pink">Pink</SelectItem>
+                      <SelectItem value="red">Red</SelectItem>
+                      <SelectItem value="yellow">Yellow</SelectItem>
+                      <SelectItem value="green">Green</SelectItem>
+                      <SelectItem value="blue">Blue</SelectItem>
+                      <SelectItem value="orange">Orange</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="px-5 py-4 border-t flex gap-2">
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button type="button" variant="outline" size="sm" className="gap-1.5 shrink-0">
-                <SlidersHorizontal className="h-3.5 w-3.5" />
-                Advanced
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="right">
-              <SheetHeader>
-                <SheetTitle>Advanced Settings</SheetTitle>
-                <SheetDescription>Fine-tune plot appearance and filtering</SheetDescription>
-              </SheetHeader>
-              <SheetBody className="space-y-5">
-                <FieldRow label="Gene Label" hint="Optional gene name to display on the plot">
-                  <Input
-                    placeholder="e.g. GAPDH"
-                    value={geneID}
-                    onChange={(e) => setGeneID(e.target.value)}
-                  />
-                </FieldRow>
-
-                <FieldRow label="Transcript ID" hint="Filter to a specific transcript (leave blank for all)">
-                  <Input
-                    placeholder="e.g. ENST00000123456"
-                    value={txID}
-                    onChange={(e) => setTxID(e.target.value)}
-                    className="font-mono text-sm"
-                  />
-                </FieldRow>
-
-                <FieldRow label="Merge Overlapping Peaks (bp)" hint="Merge peaks within N bp of each other. 0 = disabled">
-                  <Input type="number" min="0" value={merge} onChange={(e) => setMerge(e.target.value)} />
-                </FieldRow>
-
-                <FieldRow label="Intron Arrows" hint="Number of direction arrows drawn per intron">
-                  <Input type="number" min="0" value={totalArrows} onChange={(e) => setTotalArrows(e.target.value)} />
-                </FieldRow>
-
-                <FieldRow label="Max Peaks Per Intron" hint="Cap displayed peaks in each intron region">
-                  <Input type="number" min="1" value={maxPerIntron} onChange={(e) => setMaxPerIntron(e.target.value)} />
-                </FieldRow>
-
-                <FieldRow label="Exon Color" hint="Any R color name or hex (e.g. #3b82f6)">
-                  <Input value={exonCol} onChange={(e) => setExonCol(e.target.value)} />
-                </FieldRow>
-
-                <FieldRow label="UTR Color" hint="Any R color name or hex">
-                  <Input value={utrCol} onChange={(e) => setUtrCol(e.target.value)} />
-                </FieldRow>
-              </SheetBody>
-            </SheetContent>
-          </Sheet>
-
-          <Button type="submit" disabled={!canRun} className="flex-1">
+        {/* Run button */}
+        <div className="border-t px-5 py-4">
+          <Button
+            type="submit"
+            disabled={!canRun}
+            className="w-full gap-1.5"
+            size="sm"
+          >
+            <Play className="h-3 w-3" />
             {loading ? "Running…" : "Run PlotRegion"}
           </Button>
         </div>
       </form>
 
-      <div className="flex-1 overflow-hidden flex flex-col min-h-0 p-6">
-        <PlotResult imageUrl={imageUrl} loading={loading} error={error} jobKind="region" />
+      {/* ── Plot area ── */}
+      <div className="flex flex-1 flex-col overflow-hidden p-6">
+        <PlotResult
+          imageUrl={imageUrl}
+          loading={loading}
+          error={error}
+          jobKind="region"
+        />
       </div>
     </div>
   )
