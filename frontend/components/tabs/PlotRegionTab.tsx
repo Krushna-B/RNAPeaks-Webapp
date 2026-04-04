@@ -80,6 +80,8 @@ function Field({
 export function PlotRegionTab() {
   // Required
   const [uploadId, setUploadId] = useState<string | null>(null)
+  const [gtfUploadId, setGtfUploadId] = useState<string | null>(null)
+  const [species, setSpecies] = useState("Human")
   const [chr, setChr] = useState("")
   const [start, setStart] = useState("")
   const [end, setEnd] = useState("")
@@ -127,6 +129,8 @@ export function PlotRegionTab() {
     try {
       const url = await runPlotRegion({
         uploadId,
+        gtfUploadId: gtfUploadId ?? undefined,
+        species,
         chr,
         start,
         end,
@@ -182,7 +186,7 @@ export function PlotRegionTab() {
         {/* Scrollable body */}
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
           {/* DATA FILE */}
-          <SectionLabel>Data File</SectionLabel>
+          <SectionLabel>Data Files</SectionLabel>
 
           <FileUpload
             label="BED File"
@@ -190,6 +194,27 @@ export function PlotRegionTab() {
             onUploadComplete={(id) => setUploadId(id)}
             onClear={() => setUploadId(null)}
           />
+
+          <FileUpload
+            label="Custom GTF (optional)"
+            accept=".gtf,.gz"
+            onUploadComplete={(id) => setGtfUploadId(id)}
+            onClear={() => setGtfUploadId(null)}
+          />
+
+          {!gtfUploadId && (
+            <Field label="Species">
+              <Select value={species} onValueChange={setSpecies}>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Human">Human (hg38)</SelectItem>
+                  <SelectItem value="Mouse">Mouse (mm10)</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+          )}
 
           {/* REGION */}
           <SectionLabel>Region</SectionLabel>

@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
     {
       token: uploadToken,
       sessionId: nonce,
-      url: `${HF_SPACE_URL}/upload`,
+      url: `${HF_SPACE_URL}/ingest`,
     },
     { headers: { "Cache-Control": "no-store" } }
   )
