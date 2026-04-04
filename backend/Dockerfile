@@ -19,7 +19,10 @@ RUN apt-get update && apt-get install -y \
   zlib1g-dev \
   nginx \
   curl \
+  wget \
   git \
+  git-lfs \
+  procps \
   gettext-base \
   && rm -rf /var/lib/apt/lists/*
 
@@ -54,7 +57,9 @@ RUN chmod +x /app/start.sh
 
 WORKDIR /app
 
-EXPOSE 7860
+# Dev Mode requires /app owned by uid 1000
+RUN useradd -m -u 1000 user && chown -R user /app
 
+EXPOSE 7860
 
 CMD ["/app/start.sh"]
