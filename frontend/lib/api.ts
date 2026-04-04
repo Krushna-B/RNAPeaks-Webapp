@@ -3,7 +3,7 @@ import { friendlyError } from "@/lib/errors"
 
 export async function deleteUpload(uploadId: string): Promise<void> {
   const sessionToken = await getSessionToken()
-  await fetch(`/api/upload/${uploadId}`, {
+  await fetch(`/api/ingest/${uploadId}`, {
     method: "DELETE",
     headers: { "X-Session-Token": sessionToken },
   })
@@ -92,6 +92,8 @@ export async function runPlotGene(params: PlotGeneParams): Promise<string> {
 
 export interface PlotRegionParams {
   uploadId: string
+  gtfUploadId?: string
+  species?: string
   chr: string
   start: string
   end: string
@@ -121,6 +123,8 @@ export interface PlotRegionParams {
 export async function runPlotRegion(params: PlotRegionParams): Promise<string> {
   return fetchPlot("plot-region", {
     upload_id: params.uploadId,
+    gtf_upload_id: params.gtfUploadId ?? "",
+    species: params.species ?? "",
     Chr: params.chr,
     Start: params.start,
     End: params.end,

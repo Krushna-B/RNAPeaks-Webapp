@@ -125,7 +125,7 @@ function(req, res) {
   # Token format: "<sessionNonce>|<expiryUnixSecs>|<hmac-sha256-hex>"
   # HF recomputes the HMAC using its own copy of HF_SECRET_TOKEN and rejects
   # anything expired or tampered with.
-  if (req$PATH_INFO == "/upload") {
+  if (req$PATH_INFO == "/ingest") {
     parts <- strsplit(token, "\\|", fixed = FALSE)[[1]]
     if (length(parts) != 3L) {
       res$status <- 401
@@ -221,7 +221,7 @@ function() {
 
 # ── Upload ─────────────────────────────────────────────────────────────────────
 
-#* @post /upload
+#* @post /ingest
 #* @parser multi
 function(req) {
   tryCatch(
@@ -255,7 +255,7 @@ function(req) {
 
 # ── Delete Upload ──────────────────────────────────────────────────────────────
 
-#* @delete /upload/<upload_id>
+#* @delete /ingest/<upload_id>
 function(req, upload_id) {
   valid <- tryCatch(
     {
