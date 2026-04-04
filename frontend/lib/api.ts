@@ -223,6 +223,7 @@ export async function runSplicingMap(params: SplicingMapParams): Promise<string>
 export interface SequenceMapParams extends MapAdvancedParams {
   matsUploadId: string
   sequence: string
+  motifMode?: string
   widthIntoExon: string
   widthIntoIntron: string
   movingAverage: string
@@ -232,6 +233,7 @@ export async function runSequenceMap(params: SequenceMapParams): Promise<string>
   return fetchPlot("sequence-map", {
     mats_upload_id: params.matsUploadId,
     sequence: params.sequence,
+    motif_mode: params.motifMode ?? "combined",
     WidthIntoExon: params.widthIntoExon,
     WidthIntoIntron: params.widthIntoIntron,
     moving_average: params.movingAverage,

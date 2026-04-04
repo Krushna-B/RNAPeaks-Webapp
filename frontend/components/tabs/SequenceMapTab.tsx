@@ -1,13 +1,18 @@
 "use client"
 
 import { useState } from "react"
-import { Play } from "lucide-react"
+import { ChevronLeft, ChevronRight, Download, Play } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { cn } from "@/lib/utils"
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select"
 import { FileUpload } from "@/components/FileUpload"
 import { PlotResult } from "@/components/PlotResult"
@@ -40,7 +45,7 @@ const STRUCTURE_COLOR_OPTIONS = [
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-2.5 pt-1">
-      <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground/60 whitespace-nowrap">
+      <span className="text-[10px] font-bold tracking-[0.1em] whitespace-nowrap text-muted-foreground/60 uppercase">
         {children}
       </span>
       <div className="h-px flex-1 bg-border/60" />
@@ -49,20 +54,60 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 function Field({
-  label, hint, required, children,
+  label,
+  hint,
+  required,
+  children,
 }: {
-  label: string; hint?: string; required?: boolean; children: React.ReactNode
+  label: string
+  hint?: string
+  required?: boolean
+  children: React.ReactNode
 }) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs font-medium leading-none">
+      <Label className="text-xs leading-none font-medium">
         {label}
         {required && <span className="ml-0.5 text-destructive">*</span>}
       </Label>
       {children}
-      {hint && <p className="text-[11px] leading-snug text-muted-foreground">{hint}</p>}
+      {hint && (
+        <p className="text-[11px] leading-snug text-muted-foreground">{hint}</p>
+      )}
     </div>
   )
+}
+
+function downloadPng(url: string, filename: string) {
+  const a = document.createElement("a")
+  a.href = url
+  a.download = filename
+  a.click()
+}
+
+async function downloadPdf(url: string, motifLabel: string) {
+  const img = new Image()
+  img.src = url
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve()
+    img.onerror = reject
+  })
+  const canvas = document.createElement("canvas")
+  canvas.width = img.naturalWidth
+  canvas.height = img.naturalHeight
+  const ctx = canvas.getContext("2d")!
+  ctx.drawImage(img, 0, 0)
+  const dataUrl = canvas.toDataURL("image/png")
+  const { jsPDF } = await import("jspdf")
+  const orientation = img.naturalWidth >= img.naturalHeight ? "l" : "p"
+  const pdf = new jsPDF({
+    orientation,
+    unit: "px",
+    format: [img.naturalWidth, img.naturalHeight],
+    hotfixes: ["px_scaling"],
+  })
+  pdf.addImage(dataUrl, "PNG", 0, 0, img.naturalWidth, img.naturalHeight)
+  pdf.save(`rnapeaks-${motifLabel}.pdf`)
 }
 
 const ALL_GROUPS = ["Retained", "Excluded", "Control"] as const
@@ -70,6 +115,9 @@ const ALL_GROUPS = ["Retained", "Excluded", "Control"] as const
 export function SequenceMapTab() {
   const [matsUploadId, setMatsUploadId] = useState<string | null>(null)
   const [sequence, setSequence] = useState("")
+  const [motifMode, setMotifMode] = useState<"combined" | "individual">(
+    "combined"
+  )
 
   // Main params
   const [widthIntoExon, setWidthIntoExon] = useState("50")
@@ -82,7 +130,11 @@ export function SequenceMapTab() {
   const [retainedIncLevelDiff, setRetainedIncLevelDiff] = useState("0.1")
   const [exclusionIncLevelDiff, setExclusionIncLevelDiff] = useState("-0.1")
   const [minCount, setMinCount] = useState("50")
-  const [groups, setGroups] = useState<string[]>(["Retained", "Excluded", "Control"])
+  const [groups, setGroups] = useState<string[]>([
+    "Retained",
+    "Excluded",
+    "Control",
+  ])
 
   // Control sampling
   const [controlMultiplier, setControlMultiplier] = useState("2")
@@ -102,7 +154,12 @@ export function SequenceMapTab() {
   const [controlCol, setControlCol] = useState("black")
   const [exonCol, setExonCol] = useState("navy")
 
+  // Results
   const [imageUrl, setImageUrl] = useState<string | null>(null)
+  const [individualImages, setIndividualImages] = useState<
+    { label: string; url: string }[]
+  >([])
+  const [individualIndex, setIndividualIndex] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -117,18 +174,60 @@ export function SequenceMapTab() {
     setLoading(true)
     setError(null)
     setImageUrl(null)
+    setIndividualImages([])
+    setIndividualIndex(0)
+
+    const motifs = sequence
+      .split(",")
+      .map((m) => m.trim().toUpperCase())
+      .filter(Boolean)
+
+    const commonParams = {
+      matsUploadId: matsUploadId!,
+      widthIntoExon,
+      widthIntoIntron,
+      movingAverage,
+      pValueRetainedExclusion,
+      pValueControls,
+      retainedIncLevelDiff,
+      exclusionIncLevelDiff,
+      minCount,
+      groups: groups.join(","),
+      controlMultiplier,
+      controlIterations,
+      zThreshold,
+      minConsecutive,
+      title,
+      retainedCol,
+      excludedCol,
+      controlCol,
+      exonCol,
+      lineWidth,
+      axisTextSize,
+      titleSize,
+    }
+
     try {
-      const url = await runSequenceMap({
-        matsUploadId, sequence: sequence.trim(),
-        widthIntoExon, widthIntoIntron, movingAverage,
-        pValueRetainedExclusion, pValueControls,
-        retainedIncLevelDiff, exclusionIncLevelDiff,
-        minCount, groups: groups.join(","),
-        controlMultiplier, controlIterations, zThreshold, minConsecutive,
-        title, retainedCol, excludedCol, controlCol, exonCol,
-        lineWidth, axisTextSize, titleSize,
-      })
-      setImageUrl(url)
+      if (motifMode === "combined") {
+        const url = await runSequenceMap({
+          ...commonParams,
+          sequence: motifs.join(","),
+          motifMode: "combined",
+        })
+        setImageUrl(url)
+      } else {
+        // Individual: one API call per motif, run in parallel
+        const results = await Promise.all(
+          motifs.map((m) =>
+            runSequenceMap({
+              ...commonParams,
+              sequence: m,
+              motifMode: "combined",
+            }).then((url) => ({ label: m, url }))
+          )
+        )
+        setIndividualImages(results)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Analysis failed")
     } finally {
@@ -136,14 +235,29 @@ export function SequenceMapTab() {
     }
   }
 
-  const canRun = !!matsUploadId && !!sequence.trim() && groups.length > 0 && !loading
+  const parsedMotifs = sequence
+    .split(",")
+    .map((m) => m.trim())
+    .filter(Boolean)
+  const canRun =
+    !!matsUploadId && parsedMotifs.length > 0 && groups.length > 0 && !loading
+
+  const showCarousel =
+    motifMode === "individual" &&
+    individualImages.length > 0 &&
+    !loading &&
+    !error
+  const curImage = showCarousel ? individualImages[individualIndex] : null
 
   return (
     <div className="flex h-full">
       {/* ── Sidebar ── */}
       <form
         className="flex h-full w-[320px] shrink-0 flex-col overflow-hidden border-r bg-muted/20"
-        onSubmit={(e) => { e.preventDefault(); if (canRun) handleRun() }}
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (canRun) handleRun()
+        }}
       >
         {/* Header */}
         <div className="border-b px-5 py-3.5">
@@ -155,7 +269,6 @@ export function SequenceMapTab() {
 
         {/* Scrollable body */}
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
-
           {/* DATA FILE */}
           <SectionLabel>Data File</SectionLabel>
 
@@ -169,13 +282,51 @@ export function SequenceMapTab() {
           {/* TARGET */}
           <SectionLabel>Target</SectionLabel>
 
-          <Field label="Sequence Motif" hint="Supports IUPAC ambiguity codes (Y, R, N, etc.)" required>
+          <Field
+            label="Sequence Motif(s)"
+            hint="Separate multiple motifs with commas. Supports IUPAC codes (Y, R, N, etc.)"
+            required
+          >
             <Input
-              placeholder="e.g. CCCC or YCAY"
+              placeholder="e.g. YCAY or YCAY, CCCC"
               value={sequence}
               onChange={(e) => setSequence(e.target.value.toUpperCase())}
               className="h-8 font-mono text-sm"
             />
+          </Field>
+
+          <Field label="Analysis Mode">
+            <div className="flex overflow-hidden rounded-md border">
+              <button
+                type="button"
+                onClick={() => setMotifMode("combined")}
+                className={cn(
+                  "flex-1 py-1.5 text-xs font-medium transition-colors",
+                  motifMode === "combined"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Combined
+              </button>
+              <button
+                type="button"
+                onClick={() => setMotifMode("individual")}
+                className={cn(
+                  "flex-1 border-l py-1.5 text-xs font-medium transition-colors",
+                  motifMode === "individual"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Individual
+              </button>
+            </div>
+            <p className="text-[11px] leading-snug text-muted-foreground">
+              {motifMode === "combined"
+                ? "All motifs combined into a single plot"
+                : "One plot per motif, navigate with arrows"}
+            </p>
           </Field>
 
           {/* PARAMETERS */}
@@ -214,7 +365,10 @@ export function SequenceMapTab() {
 
           <div className="flex gap-4">
             {ALL_GROUPS.map((g) => (
-              <label key={g} className="flex items-center gap-1.5 cursor-pointer">
+              <label
+                key={g}
+                className="flex cursor-pointer items-center gap-1.5"
+              >
                 <Checkbox
                   checked={groups.includes(g)}
                   onCheckedChange={() => toggleGroup(g)}
@@ -230,7 +384,9 @@ export function SequenceMapTab() {
           <Field label="p-value (Retained / Excluded)">
             <Input
               type="number"
-              min="0" max="1" step="0.01"
+              min="0"
+              max="1"
+              step="0.01"
               value={pValueRetainedExclusion}
               onChange={(e) => setPValueRetainedExclusion(e.target.value)}
               className="h-8 text-sm"
@@ -240,7 +396,9 @@ export function SequenceMapTab() {
           <Field label="p-value (Controls)">
             <Input
               type="number"
-              min="0" max="1" step="0.01"
+              min="0"
+              max="1"
+              step="0.01"
               value={pValueControls}
               onChange={(e) => setPValueControls(e.target.value)}
               className="h-8 text-sm"
@@ -285,7 +443,8 @@ export function SequenceMapTab() {
             <Field label="Multiplier">
               <Input
                 type="number"
-                min="0.1" step="0.1"
+                min="0.1"
+                step="0.1"
                 value={controlMultiplier}
                 onChange={(e) => setControlMultiplier(e.target.value)}
                 className="h-8 text-sm"
@@ -294,7 +453,8 @@ export function SequenceMapTab() {
             <Field label="Iterations">
               <Input
                 type="number"
-                min="5" step="5"
+                min="5"
+                step="5"
                 value={controlIterations}
                 onChange={(e) => setControlIterations(e.target.value)}
                 className="h-8 text-sm"
@@ -362,7 +522,8 @@ export function SequenceMapTab() {
           <Field label="Line Width">
             <Input
               type="number"
-              min="0.1" step="0.1"
+              min="0.1"
+              step="0.1"
               value={lineWidth}
               onChange={(e) => setLineWidth(e.target.value)}
               className="h-8 text-sm"
@@ -372,51 +533,71 @@ export function SequenceMapTab() {
           <div className="grid grid-cols-2 gap-3">
             <Field label="Retained Color">
               <Select value={retainedCol} onValueChange={setRetainedCol}>
-                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   {LINE_COLOR_OPTIONS.map((c) => (
-                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                    <SelectItem key={c.value} value={c.value}>
+                      {c.label}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </Field>
             <Field label="Excluded Color">
               <Select value={excludedCol} onValueChange={setExcludedCol}>
-                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   {LINE_COLOR_OPTIONS.map((c) => (
-                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                    <SelectItem key={c.value} value={c.value}>
+                      {c.label}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </Field>
             <Field label="Control Color">
               <Select value={controlCol} onValueChange={setControlCol}>
-                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   {LINE_COLOR_OPTIONS.map((c) => (
-                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                    <SelectItem key={c.value} value={c.value}>
+                      {c.label}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </Field>
             <Field label="Exon Color">
               <Select value={exonCol} onValueChange={setExonCol}>
-                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   {STRUCTURE_COLOR_OPTIONS.map((c) => (
-                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                    <SelectItem key={c.value} value={c.value}>
+                      {c.label}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </Field>
           </div>
-
         </div>
 
         {/* Run button */}
         <div className="border-t px-5 py-4">
-          <Button type="submit" disabled={!canRun} className="w-full gap-1.5" size="sm">
+          <Button
+            type="submit"
+            disabled={!canRun}
+            className="w-full gap-1.5"
+            size="sm"
+          >
             <Play className="h-3 w-3" />
             {loading ? "Running…" : "Run Sequence Map"}
           </Button>
@@ -425,7 +606,79 @@ export function SequenceMapTab() {
 
       {/* ── Plot area ── */}
       <div className="flex flex-1 flex-col overflow-hidden p-6">
-        <PlotResult imageUrl={imageUrl} loading={loading} error={error} jobKind="sequence" />
+        {showCarousel ? (
+          <div className="flex h-full flex-col gap-3">
+            {/* Nav bar */}
+            <div className="flex shrink-0 items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => setIndividualIndex((i) => i - 1)}
+                  disabled={individualIndex === 0}
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </Button>
+                <span className="font-mono text-sm font-semibold">
+                  {curImage!.label}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {individualIndex + 1} / {individualImages.length}
+                </span>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => setIndividualIndex((i) => i + 1)}
+                  disabled={individualIndex === individualImages.length - 1}
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    downloadPng(
+                      curImage!.url,
+                      `rnapeaks-${curImage!.label}.png`
+                    )
+                  }
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  PNG
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => downloadPdf(curImage!.url, curImage!.label)}
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  PDF
+                </Button>
+              </div>
+            </div>
+            {/* Image */}
+            <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border bg-white dark:bg-muted/10">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                key={curImage!.url}
+                src={curImage!.url}
+                alt={curImage!.label}
+                className="h-full w-full object-contain"
+              />
+            </div>
+          </div>
+        ) : (
+          <PlotResult
+            imageUrl={imageUrl}
+            loading={loading}
+            error={error}
+            jobKind="sequence"
+          />
+        )}
       </div>
     </div>
   )
