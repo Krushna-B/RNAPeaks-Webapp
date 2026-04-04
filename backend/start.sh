@@ -58,12 +58,14 @@ for PORT in $(seq 7861 $((7860 + WORKERS))); do
   until curl -sf "http://127.0.0.1:$PORT/health" | grep -q '"status":"ok"' 2>/dev/null; do
     (( ++attempts ))
     if (( attempts >= 90 )); then
-      echo "[start.sh] WARNING: worker on port $PORT did not become ready after 90s"
+      echo "[start.sh] ERROR: worker on port $PORT did not become ready after 90s — nginx will start but requests will fail"
       break
     fi
     sleep 1
   done
-  echo "[start.sh] Worker on port $PORT is ready (${attempts}s)"
+  if (( attempts < 90 )); then
+    echo "[start.sh] Worker on port $PORT is ready (${attempts}s)"
+  fi
 done
 
 # Render the nginx config template with the allowed frontend origin.
