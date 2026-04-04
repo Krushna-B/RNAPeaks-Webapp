@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - "backend/**"
+  repository_dispatch:
+    types: [rnapeaks-package-updated]
   workflow_dispatch:
     inputs:
       skip_build:

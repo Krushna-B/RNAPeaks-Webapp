@@ -90,7 +90,7 @@ for PORT in $(seq 7861 $((7860 + WORKERS))); do
     fi
     sleep 1
   done
-  if (( attempts < WORKER_READY_TIMEOUT )); then
+  if [[ $attempts -lt $WORKER_READY_TIMEOUT ]]; then
     echo "[start.sh] Worker on port $PORT is ready (${attempts}s)"
   fi
 done
