@@ -37,12 +37,17 @@ RUN R -e " \
   if (!requireNamespace('RNAPeaks', quietly=TRUE)) stop('RNAPeaks installation failed') \
   "
 
-# Install BSgenome packages at build time
-RUN R -e " \
-  BiocManager::install(c('BSgenome.Hsapiens.UCSC.hg38', 'BSgenome.Mmusculus.UCSC.mm10'), ask=FALSE); \
-  if (!requireNamespace('BSgenome.Hsapiens.UCSC.hg38', quietly=TRUE)) stop('BSgenome.Hsapiens.UCSC.hg38 install failed'); \
-  if (!requireNamespace('BSgenome.Mmusculus.UCSC.mm10', quietly=TRUE)) stop('BSgenome.Mmusculus.UCSC.mm10 install failed') \
-  "
+# Install BSgenome packages at build time (each in its own layer with retry)
+RUN for attempt in 1 2 3; do \
+      R -e "BiocManager::install('BSgenome.Hsapiens.UCSC.hg38', ask=FALSE); \
+            if (!requireNamespace('BSgenome.Hsapiens.UCSC.hg38', quietly=TRUE)) stop('failed')" \
+      && break || { echo "hg38 attempt $attempt failed, retrying..."; sleep 10; }; \
+    done
+RUN for attempt in 1 2 3; do \
+      R -e "BiocManager::install('BSgenome.Mmusculus.UCSC.mm10', ask=FALSE); \
+            if (!requireNamespace('BSgenome.Mmusculus.UCSC.mm10', quietly=TRUE)) stop('failed')" \
+      && break || { echo "mm10 attempt $attempt failed, retrying..."; sleep 10; }; \
+    done
 
 # Install plumber, uuid, and digest (digest::hmac used to verify upload tokens)
 RUN R -e "install.packages(c('plumber', 'uuid', 'digest'), repos='https://cloud.r-project.org'); library(plumber)"
