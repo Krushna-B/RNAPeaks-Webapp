@@ -34,7 +34,11 @@ RUN R -e " \
   "
 
 # Install BSgenome packages at build time
-RUN R -e "BiocManager::install(c('BSgenome.Hsapiens.UCSC.hg38', 'BSgenome.Mmusculus.UCSC.mm10'), ask=FALSE)"
+RUN R -e " \
+  BiocManager::install(c('BSgenome.Hsapiens.UCSC.hg38', 'BSgenome.Mmusculus.UCSC.mm10'), ask=FALSE); \
+  if (!requireNamespace('BSgenome.Hsapiens.UCSC.hg38', quietly=TRUE)) stop('BSgenome.Hsapiens.UCSC.hg38 install failed'); \
+  if (!requireNamespace('BSgenome.Mmusculus.UCSC.mm10', quietly=TRUE)) stop('BSgenome.Mmusculus.UCSC.mm10 install failed') \
+  "
 
 # Install plumber, uuid, and digest (digest::hmac used to verify upload tokens)
 RUN R -e "install.packages(c('plumber', 'uuid', 'digest'), repos='https://cloud.r-project.org'); library(plumber)"
