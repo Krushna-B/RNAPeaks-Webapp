@@ -31,11 +31,12 @@ RUN R -e "install.packages('BiocManager', repos='https://cloud.r-project.org')"
 RUN R -e "BiocManager::install(c('GenomicRanges', 'AnnotationHub', 'BiocFileCache'), ask=FALSE)"
 
 # Install RNAPeaks from GitHub (pulls all CRAN/Bioc deps automatically)
-RUN R -e " \
-  install.packages('remotes', repos='https://cloud.r-project.org'); \
-  remotes::install_github('Krushna-B/RNAPeaks', dependencies=TRUE, upgrade='always'); \
-  if (!requireNamespace('RNAPeaks', quietly=TRUE)) stop('RNAPeaks installation failed') \
-  "
+RUN for attempt in 1 2 3; do \
+      R -e "install.packages('remotes', repos='https://cloud.r-project.org'); \
+            remotes::install_github('Krushna-B/RNAPeaks', dependencies=TRUE, upgrade='never'); \
+            if (!requireNamespace('RNAPeaks', quietly=TRUE)) stop('failed')" \
+      && break || { echo "RNAPeaks attempt $attempt failed, retrying..."; sleep 15; }; \
+    done
 
 # Install BSgenome packages at build time (each in its own layer with retry)
 RUN for attempt in 1 2 3; do \
