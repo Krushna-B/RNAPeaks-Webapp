@@ -56,7 +56,7 @@ WORKDIR /app
 EXPOSE 7860
 
 # Mark the container unhealthy if the plumber workers (via nginx) stop responding.
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-  CMD curl -sf http://localhost:7860/health | grep -q '"status":"ok"' || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=300s --retries=3 \
+  CMD curl -sf --max-time 10 http://localhost:7860/health | grep -q '"status":"ok"' || exit 1
 
 CMD ["/app/start.sh"]

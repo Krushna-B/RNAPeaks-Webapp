@@ -41,7 +41,29 @@ trap shutdown SIGTERM SIGINT
 # Clear any corrupted AnnotationHub sqlite from a previous unclean shutdown.
 rm -f /root/.cache/R/AnnotationHub/annotationhub.sqlite3
 
-#Start plumber workers
+# Render the nginx config template with the allowed frontend origin.
+# Fall back to "__disabled__" (a string that never matches a real Origin header)
+# instead of an empty string — an empty key in the nginx map block is a parse
+# error that prevents nginx from starting at all.
+ALLOWED_ORIGIN="${ALLOWED_ORIGIN:-__disabled__}" \
+  envsubst '${ALLOWED_ORIGIN}' \
+  < /etc/nginx/nginx.conf.template \
+  > /etc/nginx/nginx.conf
+
+# Validate the generated config before starting.
+nginx -t 2>&1 || { echo "[start.sh] FATAL: nginx config test failed"; exit 1; }
+
+# Start nginx FIRST so port 7860 is immediately available.
+# HF Spaces polls this port to determine if the container is alive — if nothing
+# is listening during the 150-300s worker warm-up, HF serves its own 404 page
+# for every inbound request. Workers are loaded below; requests that arrive
+# before they are ready will receive a 502 (upstream not yet available).
+echo "[start.sh] Starting nginx on port 7860"
+nginx -g "daemon off;" &
+NGINX_PID=$!
+echo "[start.sh] nginx started (pid $NGINX_PID)"
+
+# Start plumber workers in the background.
 echo "[start.sh] Starting $WORKERS plumber worker(s)..."
 
 for i in $(seq 1 "$WORKERS"); do
@@ -54,14 +76,16 @@ done
 # Poll workers until they respond to /health.
 # Startup takes ~150-160s in production (AnnotationHub FTP checks time out at
 # 60s each before falling back to local cache). Allow 300s to be safe.
+# --max-time 10: prevents curl from hanging while plumber is still in its
+# OpenAPI-spec generation phase (blocking before the httpuv event loop starts).
 WORKER_READY_TIMEOUT=${WORKER_READY_TIMEOUT:-300}
 echo "[start.sh] Waiting for workers to become ready (timeout ${WORKER_READY_TIMEOUT}s)..."
 for PORT in $(seq 7861 $((7860 + WORKERS))); do
   attempts=0
-  until curl -sf "http://127.0.0.1:$PORT/health" | grep -q '"status":"ok"' 2>/dev/null; do
-    (( ++attempts ))
+  until curl -sf --max-time 10 "http://127.0.0.1:$PORT/health" 2>/dev/null | grep -q '"status":"ok"'; do
+    (( ++attempts )) || true
     if (( attempts >= WORKER_READY_TIMEOUT )); then
-      echo "[start.sh] ERROR: worker on port $PORT did not become ready after ${WORKER_READY_TIMEOUT}s — nginx will start but requests will fail"
+      echo "[start.sh] WARNING: worker on port $PORT did not become ready after ${WORKER_READY_TIMEOUT}s"
       break
     fi
     sleep 1
@@ -70,21 +94,6 @@ for PORT in $(seq 7861 $((7860 + WORKERS))); do
     echo "[start.sh] Worker on port $PORT is ready (${attempts}s)"
   fi
 done
-
-# Render the nginx config template with the allowed frontend origin.
-# Fall back to "__disabled__" (a string that never matches a real Origin header)
-# instead of an empty string — an empty key in the nginx map block is a parse
-# error that prevents nginx from starting at all.
-ALLOWED_ORIGIN="${ALLOWED_ORIGIN:-__disabled__}" \
-  envsubst '${ALLOWED_ORIGIN}' \
-  < /etc/nginx/nginx.conf.template \
-  > /etc/nginx/nginx.conf
-
-#Start nginx in the background so the shell can handle signals
-echo "[start.sh] Starting nginx on port 7860"
-nginx -g "daemon off;" &
-NGINX_PID=$!
-echo "[start.sh] nginx started (pid $NGINX_PID)"
 
 # Block until nginx exits (or a signal fires the trap above)
 wait $NGINX_PID
