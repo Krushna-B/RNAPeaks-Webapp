@@ -73,27 +73,7 @@ for i in $(seq 1 "$WORKERS"); do
   echo "[start.sh] Worker $i started on port $PORT (pid ${WORKER_PIDS[-1]})"
 done
 
-# Poll workers until they respond to /health.
-# Startup takes ~150-160s in production (AnnotationHub FTP checks time out at
-# 60s each before falling back to local cache). Allow 300s to be safe.
-# --max-time 10: prevents curl from hanging while plumber is still in its
-# OpenAPI-spec generation phase (blocking before the httpuv event loop starts).
-WORKER_READY_TIMEOUT=${WORKER_READY_TIMEOUT:-300}
-echo "[start.sh] Waiting for workers to become ready (timeout ${WORKER_READY_TIMEOUT}s)..."
-for PORT in $(seq 7861 $((7860 + WORKERS))); do
-  attempts=0
-  until curl -sf --max-time 10 "http://127.0.0.1:$PORT/health" 2>/dev/null | grep -q '"status":"ok"'; do
-    (( ++attempts )) || true
-    if (( attempts >= WORKER_READY_TIMEOUT )); then
-      echo "[start.sh] WARNING: worker on port $PORT did not become ready after ${WORKER_READY_TIMEOUT}s"
-      break
-    fi
-    sleep 1
-  done
-  if [[ $attempts -lt $WORKER_READY_TIMEOUT ]]; then
-    echo "[start.sh] Worker on port $PORT is ready (${attempts}s)"
-  fi
-done
+echo "[start.sh] Workers starting in background — nginx will return 502 until they are ready."
 
 # Block until nginx exits (or a signal fires the trap above)
 wait $NGINX_PID
