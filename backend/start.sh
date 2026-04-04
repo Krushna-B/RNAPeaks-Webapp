@@ -51,19 +51,22 @@ for i in $(seq 1 "$WORKERS"); do
   echo "[start.sh] Worker $i started on port $PORT (pid ${WORKER_PIDS[-1]})"
 done
 
-# Poll workers until they respond to /health (GTF is pre-cached so this should be ~10-15s)
-echo "[start.sh] Waiting for workers to become ready..."
+# Poll workers until they respond to /health.
+# Startup takes ~150-160s in production (AnnotationHub FTP checks time out at
+# 60s each before falling back to local cache). Allow 300s to be safe.
+WORKER_READY_TIMEOUT=${WORKER_READY_TIMEOUT:-300}
+echo "[start.sh] Waiting for workers to become ready (timeout ${WORKER_READY_TIMEOUT}s)..."
 for PORT in $(seq 7861 $((7860 + WORKERS))); do
   attempts=0
   until curl -sf "http://127.0.0.1:$PORT/health" | grep -q '"status":"ok"' 2>/dev/null; do
     (( ++attempts ))
-    if (( attempts >= 90 )); then
-      echo "[start.sh] ERROR: worker on port $PORT did not become ready after 90s — nginx will start but requests will fail"
+    if (( attempts >= WORKER_READY_TIMEOUT )); then
+      echo "[start.sh] ERROR: worker on port $PORT did not become ready after ${WORKER_READY_TIMEOUT}s — nginx will start but requests will fail"
       break
     fi
     sleep 1
   done
-  if (( attempts < 90 )); then
+  if (( attempts < WORKER_READY_TIMEOUT )); then
     echo "[start.sh] Worker on port $PORT is ready (${attempts}s)"
   fi
 done

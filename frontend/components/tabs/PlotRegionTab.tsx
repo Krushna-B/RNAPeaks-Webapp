@@ -321,8 +321,8 @@ export function PlotRegionTab() {
             <Field label="Title Size (pt)">
               <Input
                 type="number"
-                min="6"
-                max="40"
+                min="1"
+                max="100"
                 value={titleSize}
                 onChange={(e) => setTitleSize(e.target.value)}
                 className="h-8 text-sm"
@@ -331,8 +331,8 @@ export function PlotRegionTab() {
             <Field label="Label Size (pt)">
               <Input
                 type="number"
-                min="2"
-                max="12"
+                min="1"
+                max="100"
                 value={labelSize}
                 onChange={(e) => setLabelSize(e.target.value)}
                 className="h-8 text-sm"
@@ -370,37 +370,6 @@ export function PlotRegionTab() {
               className="h-8 text-sm"
             />
           </Field>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Exon Color">
-              <Select value={exonCol} onValueChange={setExonCol}>
-                <SelectTrigger className="h-8 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {STRUCTURE_COLOR_OPTIONS.map((c) => (
-                    <SelectItem key={c.value} value={c.value}>
-                      {c.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="UTR Color">
-              <Select value={utrCol} onValueChange={setUtrCol}>
-                <SelectTrigger className="h-8 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {STRUCTURE_COLOR_OPTIONS.map((c) => (
-                    <SelectItem key={c.value} value={c.value}>
-                      {c.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-          </div>
 
           {/* OPTIONS */}
           <SectionLabel>Options</SectionLabel>
