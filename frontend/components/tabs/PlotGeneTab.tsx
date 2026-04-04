@@ -18,6 +18,7 @@ import { PlotResult } from "@/components/PlotResult"
 import { runPlotGene } from "@/lib/api"
 
 const COLOR_OPTIONS = [
+  { value: "pink", label: "Pink" },
   { value: "purple", label: "Purple" },
   { value: "blue", label: "Blue" },
   { value: "red", label: "Red" },
@@ -276,8 +277,8 @@ export function PlotGeneTab() {
             <Field label="Title Size (pt)">
               <Input
                 type="number"
-                min="6"
-                max="32"
+                min="1"
+                max="100"
                 value={titleSize}
                 onChange={(e) => setTitleSize(e.target.value)}
                 className="h-8 text-sm"
@@ -287,7 +288,7 @@ export function PlotGeneTab() {
               <Input
                 type="number"
                 min="1"
-                max="24"
+                max="100"
                 value={labelSize}
                 onChange={(e) => setLabelSize(e.target.value)}
                 className="h-8 text-sm"

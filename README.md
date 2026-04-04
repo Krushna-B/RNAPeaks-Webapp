@@ -1,29 +1,7 @@
-# RNAPeaks Webapp
+# RNAPeaks Web App
 
-A web application for the RNAPeaks Package
+![R](https://img.shields.io/badge/R-4.3.3-276DC3?style=flat-square&logo=r&logoColor=white) ![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white) ![Next.js](https://img.shields.io/badge/Next.js-15-black?style=flat-square&logo=next.js&logoColor=white) ![Vercel](https://img.shields.io/badge/Vercel-deployed-000000?style=flat-square&logo=vercel&logoColor=white) ![Hugging Face](https://img.shields.io/badge/Hugging%20Face-Spaces-FFD21E?style=flat-square&logo=huggingface&logoColor=black)
 
-## Structure
+RNAPeaks Web App is a browser-based interface for visualizing RNA-binding protein peaks across gene models, genomic regions, and splicing events - no local R installation required.
 
-- `frontend/` — Next.js application
-- `backend/` — API server
-
-## Architecture
-### Big Picture
-- User Browser -> (Via HTTPS) Vercel (Next.js Frontend & APIs) -> Hugging Face Spaces(nginx[reverse proxy] -> plumber R workers)
-- Browser is the client, Renders the UI (HTML), Stores session token in sessionStorage(Tab Memory), Make's http api req to /api on Vercel
-- Vercel Server:
-    - Job A: Servers the Frontend, sends HTML, CSS, JS to webbrowswer, 
-    - Job B: API Proxy, nextjs server call's the plumber worker API's from the input requests it gets from webbrowser
-        - Read X-Session Token
-        - Validates the HMAC Signature using Session Secret
-- Layer 3:
- - NGINX:
-    - Reverse Proxy, Requests arrive at NGINX and it processes before sending to R workers
-    - does 2 worker load balancing
-    - Rate Limiting: Tracks requests each session has made
-    
-
-
-## Development
-
-See `frontend/README.md` for setup instructions.
+**Learn more in the [official documentation](https://github.com/Krushna-B/RNAPeaks).**
