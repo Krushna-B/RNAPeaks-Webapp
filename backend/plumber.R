@@ -95,7 +95,8 @@ function(pr) {
     # Force JSON serializer — routes annotated @serializer png would otherwise
     # try to convert list(error=...) to raw bytes and crash the response pipeline.
     res$serializer <- plumber::serializer_json()
-    list(error = msg)
+    # jsonlite::unbox ensures the string serializes as a scalar, not an array.
+    list(error = jsonlite::unbox(msg))
   })
 }
 
