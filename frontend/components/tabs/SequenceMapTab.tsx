@@ -409,7 +409,7 @@ export function SequenceMapTab() {
             <Field label="Retained ΔInc">
               <Input
                 type="number"
-                step="0.05"
+                step="0.01"
                 value={retainedIncLevelDiff}
                 onChange={(e) => setRetainedIncLevelDiff(e.target.value)}
                 className="h-8 text-sm"
@@ -418,7 +418,7 @@ export function SequenceMapTab() {
             <Field label="Excluded ΔInc">
               <Input
                 type="number"
-                step="0.05"
+                step="0.01"
                 value={exclusionIncLevelDiff}
                 onChange={(e) => setExclusionIncLevelDiff(e.target.value)}
                 className="h-8 text-sm"
@@ -453,8 +453,8 @@ export function SequenceMapTab() {
             <Field label="Iterations">
               <Input
                 type="number"
-                min="5"
-                step="5"
+                min="1"
+                step="1"
                 value={controlIterations}
                 onChange={(e) => setControlIterations(e.target.value)}
                 className="h-8 text-sm"
@@ -469,7 +469,7 @@ export function SequenceMapTab() {
             <Field label="Z Threshold">
               <Input
                 type="number"
-                step="0.1"
+                step="0.01"
                 value={zThreshold}
                 onChange={(e) => setZThreshold(e.target.value)}
                 className="h-8 text-sm"
@@ -502,7 +502,7 @@ export function SequenceMapTab() {
             <Field label="Title Size (pt)">
               <Input
                 type="number"
-                min="8"
+                min="1"
                 value={titleSize}
                 onChange={(e) => setTitleSize(e.target.value)}
                 className="h-8 text-sm"
@@ -511,7 +511,7 @@ export function SequenceMapTab() {
             <Field label="Axis Text Size (pt)">
               <Input
                 type="number"
-                min="6"
+                min="1"
                 value={axisTextSize}
                 onChange={(e) => setAxisTextSize(e.target.value)}
                 className="h-8 text-sm"
