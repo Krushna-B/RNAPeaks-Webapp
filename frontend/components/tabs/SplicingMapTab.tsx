@@ -7,7 +7,11 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select"
 import { FileUpload } from "@/components/FileUpload"
 import { PlotResult } from "@/components/PlotResult"
@@ -40,7 +44,7 @@ const STRUCTURE_COLOR_OPTIONS = [
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-2.5 pt-1">
-      <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground/60 whitespace-nowrap">
+      <span className="text-[10px] font-bold tracking-[0.1em] whitespace-nowrap text-muted-foreground/60 uppercase">
         {children}
       </span>
       <div className="h-px flex-1 bg-border/60" />
@@ -49,15 +53,21 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 function Field({
-  label, hint, children,
+  label,
+  hint,
+  children,
 }: {
-  label: string; hint?: string; children: React.ReactNode
+  label: string
+  hint?: string
+  children: React.ReactNode
 }) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs font-medium leading-none">{label}</Label>
+      <Label className="text-xs leading-none font-medium">{label}</Label>
       {children}
-      {hint && <p className="text-[11px] leading-snug text-muted-foreground">{hint}</p>}
+      {hint && (
+        <p className="text-[11px] leading-snug text-muted-foreground">{hint}</p>
+      )}
     </div>
   )
 }
@@ -79,7 +89,11 @@ export function SplicingMapTab() {
   const [retainedIncLevelDiff, setRetainedIncLevelDiff] = useState("0.1")
   const [exclusionIncLevelDiff, setExclusionIncLevelDiff] = useState("-0.1")
   const [minCount, setMinCount] = useState("50")
-  const [groups, setGroups] = useState<string[]>(["Retained", "Excluded", "Control"])
+  const [groups, setGroups] = useState<string[]>([
+    "Retained",
+    "Excluded",
+    "Control",
+  ])
 
   // Control sampling
   const [controlMultiplier, setControlMultiplier] = useState("2")
@@ -116,13 +130,29 @@ export function SplicingMapTab() {
     setImageUrl(null)
     try {
       const url = await runSplicingMap({
-        bedUploadId, matsUploadId, widthIntoExon, widthIntoIntron, movingAverage,
-        pValueRetainedExclusion, pValueControls,
-        retainedIncLevelDiff, exclusionIncLevelDiff,
-        minCount, groups: groups.join(","),
-        controlMultiplier, controlIterations, zThreshold, minConsecutive,
-        title, retainedCol, excludedCol, controlCol, exonCol,
-        lineWidth, axisTextSize, titleSize,
+        bedUploadId,
+        matsUploadId,
+        widthIntoExon,
+        widthIntoIntron,
+        movingAverage,
+        pValueRetainedExclusion,
+        pValueControls,
+        retainedIncLevelDiff,
+        exclusionIncLevelDiff,
+        minCount,
+        groups: groups.join(","),
+        controlMultiplier,
+        controlIterations,
+        zThreshold,
+        minConsecutive,
+        title,
+        retainedCol,
+        excludedCol,
+        controlCol,
+        exonCol,
+        lineWidth,
+        axisTextSize,
+        titleSize,
       })
       setImageUrl(url)
     } catch (e) {
@@ -132,14 +162,18 @@ export function SplicingMapTab() {
     }
   }
 
-  const canRun = !!bedUploadId && !!matsUploadId && groups.length > 0 && !loading
+  const canRun =
+    !!bedUploadId && !!matsUploadId && groups.length > 0 && !loading
 
   return (
     <div className="flex h-full">
       {/* ── Sidebar ── */}
       <form
         className="flex h-full w-[320px] shrink-0 flex-col overflow-hidden border-r bg-muted/20"
-        onSubmit={(e) => { e.preventDefault(); if (canRun) handleRun() }}
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (canRun) handleRun()
+        }}
       >
         {/* Header */}
         <div className="border-b px-5 py-3.5">
@@ -151,7 +185,6 @@ export function SplicingMapTab() {
 
         {/* Scrollable body */}
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
-
           {/* DATA FILES */}
           <SectionLabel>Data Files</SectionLabel>
 
@@ -205,7 +238,10 @@ export function SplicingMapTab() {
 
           <div className="flex gap-4">
             {ALL_GROUPS.map((g) => (
-              <label key={g} className="flex items-center gap-1.5 cursor-pointer">
+              <label
+                key={g}
+                className="flex cursor-pointer items-center gap-1.5"
+              >
                 <Checkbox
                   checked={groups.includes(g)}
                   onCheckedChange={() => toggleGroup(g)}
@@ -221,7 +257,9 @@ export function SplicingMapTab() {
           <Field label="p-value (Retained / Excluded)">
             <Input
               type="number"
-              min="0" max="1" step="0.01"
+              min="0"
+              max="1"
+              step="0.01"
               value={pValueRetainedExclusion}
               onChange={(e) => setPValueRetainedExclusion(e.target.value)}
               className="h-8 text-sm"
@@ -231,7 +269,9 @@ export function SplicingMapTab() {
           <Field label="p-value (Controls)">
             <Input
               type="number"
-              min="0" max="1" step="0.01"
+              min="0"
+              max="1"
+              step="0.01"
               value={pValueControls}
               onChange={(e) => setPValueControls(e.target.value)}
               className="h-8 text-sm"
@@ -242,7 +282,7 @@ export function SplicingMapTab() {
             <Field label="Retained ΔInc">
               <Input
                 type="number"
-                step="0.05"
+                step="0.01"
                 value={retainedIncLevelDiff}
                 onChange={(e) => setRetainedIncLevelDiff(e.target.value)}
                 className="h-8 text-sm"
@@ -251,7 +291,7 @@ export function SplicingMapTab() {
             <Field label="Excluded ΔInc">
               <Input
                 type="number"
-                step="0.05"
+                step="0.01"
                 value={exclusionIncLevelDiff}
                 onChange={(e) => setExclusionIncLevelDiff(e.target.value)}
                 className="h-8 text-sm"
@@ -276,7 +316,8 @@ export function SplicingMapTab() {
             <Field label="Multiplier">
               <Input
                 type="number"
-                min="0.1" step="0.1"
+                min="0.1"
+                step="0.1"
                 value={controlMultiplier}
                 onChange={(e) => setControlMultiplier(e.target.value)}
                 className="h-8 text-sm"
@@ -285,7 +326,8 @@ export function SplicingMapTab() {
             <Field label="Iterations">
               <Input
                 type="number"
-                min="5" step="5"
+                min="1"
+                step="1"
                 value={controlIterations}
                 onChange={(e) => setControlIterations(e.target.value)}
                 className="h-8 text-sm"
@@ -300,7 +342,7 @@ export function SplicingMapTab() {
             <Field label="Z Threshold">
               <Input
                 type="number"
-                step="0.1"
+                step="0.01"
                 value={zThreshold}
                 onChange={(e) => setZThreshold(e.target.value)}
                 className="h-8 text-sm"
@@ -333,7 +375,7 @@ export function SplicingMapTab() {
             <Field label="Title Size (pt)">
               <Input
                 type="number"
-                min="8"
+                min="1"
                 value={titleSize}
                 onChange={(e) => setTitleSize(e.target.value)}
                 className="h-8 text-sm"
@@ -342,7 +384,7 @@ export function SplicingMapTab() {
             <Field label="Axis Text Size (pt)">
               <Input
                 type="number"
-                min="6"
+                min="1"
                 value={axisTextSize}
                 onChange={(e) => setAxisTextSize(e.target.value)}
                 className="h-8 text-sm"
@@ -353,7 +395,8 @@ export function SplicingMapTab() {
           <Field label="Line Width">
             <Input
               type="number"
-              min="0.1" step="0.1"
+              min="0.1"
+              step="0.1"
               value={lineWidth}
               onChange={(e) => setLineWidth(e.target.value)}
               className="h-8 text-sm"
@@ -363,51 +406,71 @@ export function SplicingMapTab() {
           <div className="grid grid-cols-2 gap-3">
             <Field label="Retained Color">
               <Select value={retainedCol} onValueChange={setRetainedCol}>
-                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   {LINE_COLOR_OPTIONS.map((c) => (
-                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                    <SelectItem key={c.value} value={c.value}>
+                      {c.label}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </Field>
             <Field label="Excluded Color">
               <Select value={excludedCol} onValueChange={setExcludedCol}>
-                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   {LINE_COLOR_OPTIONS.map((c) => (
-                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                    <SelectItem key={c.value} value={c.value}>
+                      {c.label}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </Field>
             <Field label="Control Color">
               <Select value={controlCol} onValueChange={setControlCol}>
-                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   {LINE_COLOR_OPTIONS.map((c) => (
-                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                    <SelectItem key={c.value} value={c.value}>
+                      {c.label}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </Field>
             <Field label="Exon Color">
               <Select value={exonCol} onValueChange={setExonCol}>
-                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   {STRUCTURE_COLOR_OPTIONS.map((c) => (
-                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                    <SelectItem key={c.value} value={c.value}>
+                      {c.label}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </Field>
           </div>
-
         </div>
 
         {/* Run button */}
         <div className="border-t px-5 py-4">
-          <Button type="submit" disabled={!canRun} className="w-full gap-1.5" size="sm">
+          <Button
+            type="submit"
+            disabled={!canRun}
+            className="w-full gap-1.5"
+            size="sm"
+          >
             <Play className="h-3 w-3" />
             {loading ? "Running…" : "Run Splicing Map"}
           </Button>
@@ -416,7 +479,12 @@ export function SplicingMapTab() {
 
       {/* ── Plot area ── */}
       <div className="flex flex-1 flex-col overflow-hidden p-6">
-        <PlotResult imageUrl={imageUrl} loading={loading} error={error} jobKind="splicing" />
+        <PlotResult
+          imageUrl={imageUrl}
+          loading={loading}
+          error={error}
+          jobKind="splicing"
+        />
       </div>
     </div>
   )

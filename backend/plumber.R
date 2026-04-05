@@ -490,6 +490,7 @@ function(req, bed_upload_id, mats_upload_id,
 #* @post /sequence-map
 #* @serializer png list(width = 1400, height = 900, res = 150)
 function(req, mats_upload_id, sequence,
+         motif_mode = "combined",
          WidthIntoExon = "50", WidthIntoIntron = "250", moving_average = "40",
          p_valueRetainedAndExclusion = NULL, p_valueControls = NULL,
          retained_IncLevelDifference = NULL, exclusion_IncLevelDifference = NULL,
@@ -497,13 +498,16 @@ function(req, mats_upload_id, sequence,
          z_threshold = NULL, min_consecutive = NULL,
          title = NULL, retained_col = NULL, excluded_col = NULL, control_col = NULL,
          exon_col = NULL, line_width = NULL, axis_text_size = NULL, title_size = NULL) {
-  log_info("sequence-map session=", req$session_id, " sequence=", sequence)
+  log_info("sequence-map session=", req$session_id, " sequence=", sequence, " motif_mode=", motif_mode)
   tryCatch(
     {
       path <- get_upload_path(req$session_id, mats_upload_id)
       mats <- utils::read.table(path, header = TRUE, sep = "\t")
+      # Parse comma-separated motifs into a character vector
+      motifs <- trimws(strsplit(sequence, ",")[[1]])
+      motifs <- motifs[nchar(motifs) > 0]
       plot <- createSequenceMap(
-        SEMATS = mats, sequence = sequence,
+        SEMATS = mats, sequence = motifs, motif_mode = motif_mode,
         WidthIntoExon = as.integer(WidthIntoExon),
         WidthIntoIntron = as.integer(WidthIntoIntron),
         moving_average = as.integer(moving_average),
