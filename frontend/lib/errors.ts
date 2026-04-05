@@ -14,8 +14,7 @@ const STATUS_MESSAGES: Record<number, string> = {
 export function friendlyError(status: number, serverMessage?: unknown): string {
   if (typeof serverMessage === "string") {
     const s = serverMessage.trim()
-    const lower = s.toLowerCase()
-    if (s && !lower.includes("internal server error") && !lower.startsWith("<!")) {
+    if (s && !s.startsWith("<!")) {
       return s
     }
   }

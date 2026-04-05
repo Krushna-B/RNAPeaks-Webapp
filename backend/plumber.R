@@ -344,13 +344,7 @@ function(req, upload_id, geneID, species = "Human", peak_col = "purple",
     error = function(e) {
       msg <- conditionMessage(e)
       log_error("plot-gene: ", msg)
-      stop(if (grepl("File session not found|Invalid session|Invalid upload", msg)) {
-        msg
-      } else if (grepl("^(error in read\\.table|cannot open|no such file)", msg, ignore.case = TRUE)) {
-        "Could not read your BED file. Make sure it is a valid tab-separated text file."
-      } else {
-        msg
-      })
+      stop(msg)
     }
   )
 }
@@ -412,13 +406,7 @@ function(req, upload_id, Chr, Start, End, Strand, species = "Human",
     error = function(e) {
       msg <- conditionMessage(e)
       log_error("plot-region: ", msg)
-      stop(if (grepl("File session not found|Invalid session|Invalid upload", msg)) {
-        msg
-      } else if (grepl("^(error in read\\.table|cannot open|no such file)", msg, ignore.case = TRUE)) {
-        "Could not read your BED file. Make sure it is a valid tab-separated text file."
-      } else {
-        msg
-      })
+      stop(msg)
     }
   )
 }
@@ -473,13 +461,7 @@ function(req, bed_upload_id, mats_upload_id,
     error = function(e) {
       msg <- conditionMessage(e)
       log_error("splicing-map: ", msg)
-      stop(if (grepl("File session not found|Invalid session|Invalid upload", msg)) {
-        msg
-      } else if (grepl("^(error in read\\.table|cannot open|no such file)", msg, ignore.case = TRUE)) {
-        "Could not read one of your files. Make sure both files are valid tab-separated text files."
-      } else {
-        msg
-      })
+      stop(msg)
     }
   )
 }
@@ -536,13 +518,7 @@ function(req, mats_upload_id, sequence,
     error = function(e) {
       msg <- conditionMessage(e)
       log_error("sequence-map: ", msg)
-      stop(if (grepl("File session not found|Invalid session|Invalid upload", msg)) {
-        msg
-      } else if (grepl("^(error in read\\.table|cannot open|no such file)", msg, ignore.case = TRUE)) {
-        "Could not read your SE.MATS file. Make sure it is a valid tab-separated text file."
-      } else {
-        msg
-      })
+      stop(msg)
     }
   )
 }
