@@ -29,7 +29,9 @@ async function fetchPlot(
   if (!res.ok) {
     let serverMessage: string | undefined
     try {
-      serverMessage = (await res.json()).error
+      const body = await res.json()
+      const raw = body.error
+      serverMessage = Array.isArray(raw) ? raw[0] : raw
     } catch { /* ignore */ }
     throw new Error(friendlyError(res.status, serverMessage))
   }
