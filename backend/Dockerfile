@@ -53,8 +53,17 @@ RUN for attempt in 1 2 3; do \
 # Install plumber, uuid, and digest (digest::hmac used to verify upload tokens)
 RUN R -e "install.packages(c('plumber', 'uuid', 'digest'), repos='https://cloud.r-project.org'); library(plumber)"
 
-# Pre-cache the GTF at build time so cold starts don't need to download it
-RUN R -e "library(RNAPeaks); LoadGTF(species='Human'); LoadGTF(species='Mouse')"
+# Pre-cache both GTF records at build time.
+# We call AnnotationHub directly with localHub=FALSE so that the Human download
+# does not cause the subsequent Mouse download to incorrectly switch to
+# localHub=TRUE (which fails because the Mouse record isn't cached yet).
+RUN R -e " \
+  library(AnnotationHub); \
+  ah <- AnnotationHub(ask = FALSE, localHub = FALSE); \
+  invisible(ah[['AH110867']]); \
+  invisible(ah[['AH47076']]); \
+  message('GTF pre-cache complete') \
+"
 
 COPY plumber.R  /app/plumber.R
 COPY nginx.conf /etc/nginx/nginx.conf.template
