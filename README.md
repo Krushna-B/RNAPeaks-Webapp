@@ -5,7 +5,3 @@
 RNAPeaks Web App is a browser-based interface for visualizing RNA-binding protein peaks across gene models, genomic regions, and splicing events - no local R installation required.
 
 **Learn more in the [official documentation](https://github.com/Krushna-B/RNAPeaks).**
-
-<p align="center">
-  <img src="assets/demo.mov" alt="RNAPeaks demo" width="900" />
-</p>
