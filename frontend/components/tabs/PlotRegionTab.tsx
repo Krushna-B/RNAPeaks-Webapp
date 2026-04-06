@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { Play } from "lucide-react"
+import { useRef, useState } from "react"
+import { Activity, ChevronRight, Play } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select"
 import { FileUpload } from "@/components/FileUpload"
 import { PlotResult } from "@/components/PlotResult"
+import { BamCoveragePanel, type BamEntry, type BamGlobalSettings } from "@/components/BamCoveragePanel"
 import { runPlotRegion } from "@/lib/api"
 
 const COLOR_OPTIONS = [
@@ -77,6 +78,15 @@ function Field({
   )
 }
 
+const DEFAULT_BAM_SETTINGS: BamGlobalSettings = {
+  fillAlpha: "0.75",
+  ylimMin: "",
+  ylimMax: "",
+  trackHeight: "1",
+  labelSize: "9",
+  axisTextSize: "8",
+}
+
 export function PlotRegionTab() {
   // Required
   const [uploadId, setUploadId] = useState<string | null>(null)
@@ -117,9 +127,19 @@ export function PlotRegionTab() {
   const [highlightEnd, setHighlightEnd] = useState("")
   const [highlightCol, setHighlightCol] = useState("pink")
 
+  // BAM coverage panel
+  const [bamPanelOpen, setBamPanelOpen] = useState(false)
+  const [bamEntries, setBamEntries] = useState<BamEntry[]>([])
+  const [bamSettings, setBamSettings] = useState<BamGlobalSettings>(DEFAULT_BAM_SETTINGS)
+  const bamAnchorRef = useRef<HTMLButtonElement>(null)
+
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const activeBamCount = bamEntries.filter(
+    (e) => e.bamUploadId && e.baiUploadId
+  ).length
 
   async function handleRun() {
     if (!uploadId || !chr || !start || !end) return
@@ -127,6 +147,16 @@ export function PlotRegionTab() {
     setError(null)
     setImageUrl(null)
     try {
+      const completeBamEntries = bamEntries.filter(
+        (e) => e.bamUploadId && e.baiUploadId
+      )
+
+      const bamUploadIds = completeBamEntries.map((e) => e.bamUploadId!).join(",")
+      const bamBaiIds = completeBamEntries.map((e) => e.baiUploadId!).join(",")
+      // Strip commas from labels so the comma-separated encoding stays intact
+      const bamLabels = completeBamEntries.map((e) => e.label.replace(/,/g, " ")).join(",")
+      const bamFillCols = completeBamEntries.map((e) => e.fillCol).join(",")
+
       const url = await runPlotRegion({
         uploadId,
         gtfUploadId: gtfUploadId ?? undefined,
@@ -154,6 +184,16 @@ export function PlotRegionTab() {
         highlightStart: highlightEnabled ? highlightStart : "",
         highlightEnd: highlightEnabled ? highlightEnd : "",
         highlightCol: highlightEnabled ? highlightCol : "",
+        bamUploadIds: completeBamEntries.length > 0 ? bamUploadIds : "",
+        bamBaiIds: completeBamEntries.length > 0 ? bamBaiIds : "",
+        bamLabels: completeBamEntries.length > 0 ? bamLabels : "",
+        bamFillCols: completeBamEntries.length > 0 ? bamFillCols : "",
+        bamFillAlpha: bamSettings.fillAlpha,
+        bamYlimMin: bamSettings.ylimMin,
+        bamYlimMax: bamSettings.ylimMax,
+        bamTrackHeight: bamSettings.trackHeight,
+        bamLabelSize: bamSettings.labelSize,
+        bamAxisTextSize: bamSettings.axisTextSize,
       })
       setImageUrl(url)
     } catch (e) {
@@ -215,6 +255,25 @@ export function PlotRegionTab() {
               </Select>
             </Field>
           )}
+
+          {/* BAM COVERAGE TRIGGER */}
+          <button
+            ref={bamAnchorRef}
+            type="button"
+            onClick={() => setBamPanelOpen((o) => !o)}
+            className="flex w-full items-center justify-between rounded-md border bg-muted/40 px-3 py-2.5 text-sm transition-colors hover:bg-muted/70 focus:outline-none"
+          >
+            <div className="flex items-center gap-2">
+              <Activity className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="font-medium">BAM Coverage Tracks</span>
+              {activeBamCount > 0 && (
+                <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold leading-none text-primary-foreground">
+                  {activeBamCount}
+                </span>
+              )}
+            </div>
+            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+          </button>
 
           {/* REGION */}
           <SectionLabel>Region</SectionLabel>
@@ -396,6 +455,37 @@ export function PlotRegionTab() {
             />
           </Field>
 
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Exon Color">
+              <Select value={exonCol} onValueChange={setExonCol}>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STRUCTURE_COLOR_OPTIONS.map((c) => (
+                    <SelectItem key={c.value} value={c.value}>
+                      {c.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="UTR Color">
+              <Select value={utrCol} onValueChange={setUtrCol}>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STRUCTURE_COLOR_OPTIONS.map((c) => (
+                    <SelectItem key={c.value} value={c.value}>
+                      {c.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
+
           {/* OPTIONS */}
           <SectionLabel>Options</SectionLabel>
 
@@ -520,6 +610,17 @@ export function PlotRegionTab() {
           </Button>
         </div>
       </form>
+
+      {/* ── BAM Coverage floating popup ── */}
+      <BamCoveragePanel
+        open={bamPanelOpen}
+        onClose={() => setBamPanelOpen(false)}
+        anchorRef={bamAnchorRef}
+        entries={bamEntries}
+        onEntriesChange={setBamEntries}
+        settings={bamSettings}
+        onSettingsChange={setBamSettings}
+      />
 
       {/* ── Plot area ── */}
       <div className="flex flex-1 flex-col overflow-hidden p-6">

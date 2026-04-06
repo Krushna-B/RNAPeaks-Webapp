@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { Play } from "lucide-react"
+import { useRef, useState } from "react"
+import { Activity, ChevronRight, Play } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select"
 import { FileUpload } from "@/components/FileUpload"
 import { PlotResult } from "@/components/PlotResult"
+import { BamCoveragePanel, type BamEntry, type BamGlobalSettings } from "@/components/BamCoveragePanel"
 import { runPlotGene } from "@/lib/api"
 
 const COLOR_OPTIONS = [
@@ -66,6 +67,15 @@ function Field({
   )
 }
 
+const DEFAULT_BAM_SETTINGS: BamGlobalSettings = {
+  fillAlpha: "0.75",
+  ylimMin: "",
+  ylimMax: "",
+  trackHeight: "1",
+  labelSize: "9",
+  axisTextSize: "8",
+}
+
 export function PlotGeneTab() {
   // Files
   const [uploadId, setUploadId] = useState<string | null>(null)
@@ -100,10 +110,21 @@ export function PlotGeneTab() {
   const [highlightCol, setHighlightCol] = useState("pink")
   const [junctionColor, setJunctionColor] = useState("gray40")
 
+  // BAM coverage panel
+  const [bamPanelOpen, setBamPanelOpen] = useState(false)
+  const [bamEntries, setBamEntries] = useState<BamEntry[]>([])
+  const [bamSettings, setBamSettings] = useState<BamGlobalSettings>(DEFAULT_BAM_SETTINGS)
+  const bamAnchorRef = useRef<HTMLButtonElement>(null)
+
   // Result
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Count BAM tracks that have both files uploaded (ready to use)
+  const activeBamCount = bamEntries.filter(
+    (e) => e.bamUploadId && e.baiUploadId
+  ).length
 
   async function handleRun() {
     if (!uploadId || !geneID.trim()) return
@@ -111,6 +132,17 @@ export function PlotGeneTab() {
     setError(null)
     setImageUrl(null)
     try {
+      // Only include complete BAM entries (both BAM and BAI uploaded)
+      const completeBamEntries = bamEntries.filter(
+        (e) => e.bamUploadId && e.baiUploadId
+      )
+
+      const bamUploadIds = completeBamEntries.map((e) => e.bamUploadId!).join(",")
+      const bamBaiIds = completeBamEntries.map((e) => e.baiUploadId!).join(",")
+      // Strip commas from labels so the comma-separated encoding stays intact
+      const bamLabels = completeBamEntries.map((e) => e.label.replace(/,/g, " ")).join(",")
+      const bamFillCols = completeBamEntries.map((e) => e.fillCol).join(",")
+
       const url = await runPlotGene({
         uploadId,
         gtfUploadId: gtfUploadId ?? undefined,
@@ -132,6 +164,16 @@ export function PlotGeneTab() {
         highlightStart: highlightEnabled ? highlightStart : "",
         highlightEnd: highlightEnabled ? highlightEnd : "",
         highlightCol: highlightEnabled ? highlightCol : "",
+        bamUploadIds: completeBamEntries.length > 0 ? bamUploadIds : "",
+        bamBaiIds: completeBamEntries.length > 0 ? bamBaiIds : "",
+        bamLabels: completeBamEntries.length > 0 ? bamLabels : "",
+        bamFillCols: completeBamEntries.length > 0 ? bamFillCols : "",
+        bamFillAlpha: bamSettings.fillAlpha,
+        bamYlimMin: bamSettings.ylimMin,
+        bamYlimMax: bamSettings.ylimMax,
+        bamTrackHeight: bamSettings.trackHeight,
+        bamLabelSize: bamSettings.labelSize,
+        bamAxisTextSize: bamSettings.axisTextSize,
       })
       setImageUrl(url)
     } catch (e) {
@@ -193,6 +235,25 @@ export function PlotGeneTab() {
               </Select>
             </Field>
           )}
+
+          {/* BAM COVERAGE TRIGGER */}
+          <button
+            ref={bamAnchorRef}
+            type="button"
+            onClick={() => setBamPanelOpen((o) => !o)}
+            className="flex w-full items-center justify-between rounded-md border bg-muted/40 px-3 py-2.5 text-sm transition-colors hover:bg-muted/70 focus:outline-none"
+          >
+            <div className="flex items-center gap-2">
+              <Activity className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="font-medium">BAM Coverage Tracks</span>
+              {activeBamCount > 0 && (
+                <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold leading-none text-primary-foreground">
+                  {activeBamCount}
+                </span>
+              )}
+            </div>
+            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+          </button>
 
           {/* TARGET */}
           <SectionLabel>Target</SectionLabel>
@@ -450,6 +511,17 @@ export function PlotGeneTab() {
           </Button>
         </div>
       </form>
+
+      {/* ── BAM Coverage floating popup ── */}
+      <BamCoveragePanel
+        open={bamPanelOpen}
+        onClose={() => setBamPanelOpen(false)}
+        anchorRef={bamAnchorRef}
+        entries={bamEntries}
+        onEntriesChange={setBamEntries}
+        settings={bamSettings}
+        onSettingsChange={setBamSettings}
+      />
 
       {/* ── Plot area ── */}
       <div className="flex flex-1 flex-col overflow-hidden p-6">

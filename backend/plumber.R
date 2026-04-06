@@ -71,6 +71,49 @@ get_upload_path <- function(session_id, upload_id) {
   path
 }
 
+# ── BAM helper ─────────────────────────────────────────────────────────────────
+# Resolves comma-separated BAM/BAI upload IDs into a named bam_files vector
+# suitable for PlotGene / PlotRegion.  Each pair is symlinked into a temp dir
+# so Rsamtools can find the <name>.bam.bai index alongside the BAM.
+prepare_bam_files <- function(session_id, bam_ids_str, bai_ids_str, labels_str, fill_cols_str) {
+  bam_ids  <- trimws(strsplit(bam_ids_str,  ",", fixed = TRUE)[[1]])
+  bai_ids  <- trimws(strsplit(bai_ids_str,  ",", fixed = TRUE)[[1]])
+  labels   <- trimws(strsplit(labels_str,   ",", fixed = TRUE)[[1]])
+  fill_cols <- trimws(strsplit(fill_cols_str, ",", fixed = TRUE)[[1]])
+
+  n <- length(bam_ids)
+  if (n == 0 || nchar(bam_ids[1]) == 0) return(NULL)
+
+  # Pad shorter vectors to length n
+  if (length(bai_ids)   < n) bai_ids   <- rep_len(bai_ids,   n)
+  if (length(labels)    < n) labels    <- rep_len(labels,    n)
+  if (length(fill_cols) < n) fill_cols <- rep_len(fill_cols, n)
+
+  bam_paths <- character(n)
+  tmp_dirs  <- character(n)
+
+  for (i in seq_len(n)) {
+    bam_src <- get_upload_path(session_id, bam_ids[i])
+    bai_src <- get_upload_path(session_id, bai_ids[i])
+
+    tmp_dir <- tempfile(pattern = "bam_track_")
+    dir.create(tmp_dir, recursive = TRUE)
+    tmp_dirs[i] <- tmp_dir
+
+    bam_link <- file.path(tmp_dir, "track.bam")
+    bai_link <- file.path(tmp_dir, "track.bam.bai")
+
+    file.symlink(bam_src, bam_link)
+    file.symlink(bai_src, bai_link)
+
+    bam_paths[i] <- bam_link
+  }
+
+  names(bam_paths) <- labels
+
+  list(paths = bam_paths, fill_cols = fill_cols, tmp_dirs = tmp_dirs)
+}
+
 cleanup_old_sessions <- function() {
   dirs <- list.dirs(UPLOAD_DIR, full.names = TRUE, recursive = FALSE)
   now <- as.numeric(Sys.time())
@@ -286,7 +329,10 @@ function(req, upload_id, geneID, species = "Human", peak_col = "purple",
          gtf_upload_id = NULL, max_proteins = 40,
          title_size = NULL, label_size = NULL, axis_breaks_n = NULL,
          show_junctions = NULL, junction_color = NULL,
-         highlighted_region_start = NULL, highlighted_region_stop = NULL, highlighted_region_color = NULL) {
+         highlighted_region_start = NULL, highlighted_region_stop = NULL, highlighted_region_color = NULL,
+         bam_upload_ids = NULL, bam_bai_ids = NULL, bam_labels = NULL, bam_fill_cols = NULL,
+         bam_fill_alpha = NULL, bam_ylim_min = NULL, bam_ylim_max = NULL,
+         bam_track_height = NULL, bam_label_size = NULL, bam_axis_text_size = NULL) {
   log_info("plot-gene session=", req$session_id, " geneID=", geneID)
   tryCatch(
     {
@@ -321,6 +367,31 @@ function(req, upload_id, geneID, species = "Human", peak_col = "purple",
         }
       )
 
+      # Resolve BAM coverage tracks
+      bam_info <- NULL
+      if (!is.null(opt_str(bam_upload_ids)) && !is.null(opt_str(bam_bai_ids))) {
+        bam_info <- tryCatch(
+          prepare_bam_files(
+            session_id   = req$session_id,
+            bam_ids_str  = opt_str(bam_upload_ids, ""),
+            bai_ids_str  = opt_str(bam_bai_ids, ""),
+            labels_str   = opt_str(bam_labels, ""),
+            fill_cols_str = opt_str(bam_fill_cols, "steelblue")
+          ),
+          error = function(e) {
+            log_error("BAM prep failed: ", conditionMessage(e))
+            NULL
+          }
+        )
+        if (!is.null(bam_info)) {
+          on.exit(unlink(bam_info$tmp_dirs, recursive = TRUE), add = TRUE)
+        }
+      }
+
+      resolved_bam_ylim <- if (!is.null(opt_str(bam_ylim_min)) && !is.null(opt_str(bam_ylim_max))) {
+        c(as.numeric(bam_ylim_min), as.numeric(bam_ylim_max))
+      } else NULL
+
       result <- PlotGene(
         bed = bed, geneID = geneID, gtf = active_gtf, species = species,
         TxID = opt_txid(TxID),
@@ -338,6 +409,13 @@ function(req, upload_id, geneID, species = "Human", peak_col = "purple",
         highlighted_region_start = opt_int(highlighted_region_start, NULL),
         highlighted_region_stop = opt_int(highlighted_region_stop, NULL),
         highlighted_region_color = opt_str(highlighted_region_color, NULL),
+        bam_files = if (!is.null(bam_info)) bam_info$paths else NULL,
+        bam_fill_col = if (!is.null(bam_info)) bam_info$fill_cols else "steelblue",
+        bam_fill_alpha = opt_num(bam_fill_alpha, 0.75),
+        bam_ylim = resolved_bam_ylim,
+        bam_track_height = opt_num(bam_track_height, 1),
+        bam_label_size = opt_num(bam_label_size, 9),
+        bam_axis_text_size = opt_num(bam_axis_text_size, 8),
         RNA_Peaks_File_Path = plot_tmp_png, Bed_File_Path = plot_tmp_bed
       )
       print(result$plot)
@@ -358,10 +436,13 @@ function(req, upload_id, geneID, species = "Human", peak_col = "purple",
 function(req, upload_id, Chr, Start, End, Strand, species = "Human",
          peak_col = "purple", order_by = "Target",
          geneID = NULL, TxID = NULL, merge = NULL, total_arrows = NULL, max_per_intron = NULL,
-         exon_col = NULL, utr_col = NULL,
+         exon_col = NULL, utr_col = NULL, gtf_upload_id = NULL,
          max_proteins = 40, title_size = NULL, label_size = NULL, axis_breaks_n = NULL,
          five_to_three = "FALSE", show_junctions = NULL, junction_color = NULL,
-         highlighted_region_start = NULL, highlighted_region_stop = NULL, highlighted_region_color = NULL) {
+         highlighted_region_start = NULL, highlighted_region_stop = NULL, highlighted_region_color = NULL,
+         bam_upload_ids = NULL, bam_bai_ids = NULL, bam_labels = NULL, bam_fill_cols = NULL,
+         bam_fill_alpha = NULL, bam_ylim_min = NULL, bam_ylim_max = NULL,
+         bam_track_height = NULL, bam_label_size = NULL, bam_axis_text_size = NULL) {
   log_info("plot-region session=", req$session_id, " region=", Chr, ":", Start, "-", End)
   tryCatch(
     {
@@ -377,7 +458,50 @@ function(req, upload_id, Chr, Start, End, Strand, species = "Human",
 
       path <- get_upload_path(req$session_id, upload_id)
       bed <- utils::read.table(path, header = FALSE, sep = "\t")
-      active_gtf <- if (species == "Mouse") gtf_mouse else gtf
+
+      # Resolve GTF: prefer uploaded custom GTF, fall back to preloaded by species
+      active_gtf <- tryCatch(
+        {
+          gid <- opt_str(gtf_upload_id)
+          if (!is.null(gid)) {
+            gtf_path <- get_upload_path(req$session_id, gid)
+            log_info("plot-region: loading custom GTF from upload_id=", gid)
+            LoadGTF(file = gtf_path)
+          } else {
+            if (species == "Mouse") gtf_mouse else gtf
+          }
+        },
+        error = function(e) {
+          log_error("Custom GTF load failed, falling back to preloaded: ", conditionMessage(e))
+          if (species == "Mouse") gtf_mouse else gtf
+        }
+      )
+
+      # Resolve BAM coverage tracks
+      bam_info <- NULL
+      if (!is.null(opt_str(bam_upload_ids)) && !is.null(opt_str(bam_bai_ids))) {
+        bam_info <- tryCatch(
+          prepare_bam_files(
+            session_id    = req$session_id,
+            bam_ids_str   = opt_str(bam_upload_ids, ""),
+            bai_ids_str   = opt_str(bam_bai_ids, ""),
+            labels_str    = opt_str(bam_labels, ""),
+            fill_cols_str = opt_str(bam_fill_cols, "steelblue")
+          ),
+          error = function(e) {
+            log_error("BAM prep failed: ", conditionMessage(e))
+            NULL
+          }
+        )
+        if (!is.null(bam_info)) {
+          on.exit(unlink(bam_info$tmp_dirs, recursive = TRUE), add = TRUE)
+        }
+      }
+
+      resolved_bam_ylim <- if (!is.null(opt_str(bam_ylim_min)) && !is.null(opt_str(bam_ylim_max))) {
+        c(as.numeric(bam_ylim_min), as.numeric(bam_ylim_max))
+      } else NULL
+
       result <- PlotRegion(
         bed = bed, gtf = active_gtf, Chr = Chr,
         Start = as.integer(Start), End = as.integer(End),
@@ -400,6 +524,13 @@ function(req, upload_id, Chr, Start, End, Strand, species = "Human",
         highlighted_region_start = opt_int(highlighted_region_start, NULL),
         highlighted_region_stop = opt_int(highlighted_region_stop, NULL),
         highlighted_region_color = opt_str(highlighted_region_color, NULL),
+        bam_files = if (!is.null(bam_info)) bam_info$paths else NULL,
+        bam_fill_col = if (!is.null(bam_info)) bam_info$fill_cols else "steelblue",
+        bam_fill_alpha = opt_num(bam_fill_alpha, 0.75),
+        bam_ylim = resolved_bam_ylim,
+        bam_track_height = opt_num(bam_track_height, 1),
+        bam_label_size = opt_num(bam_label_size, 9),
+        bam_axis_text_size = opt_num(bam_axis_text_size, 8),
         RNA_Peaks_File_Path = plot_tmp_png, Bed_File_Path = plot_tmp_bed
       )
       print(result$plot)

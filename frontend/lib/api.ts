@@ -63,6 +63,17 @@ export interface PlotGeneParams {
   highlightStart?: string
   highlightEnd?: string
   highlightCol?: string
+  // BAM coverage tracks
+  bamUploadIds?: string   // comma-separated upload IDs for BAM files
+  bamBaiIds?: string      // comma-separated upload IDs for BAI index files
+  bamLabels?: string      // comma-separated track labels
+  bamFillCols?: string    // comma-separated fill colors
+  bamFillAlpha?: string
+  bamYlimMin?: string
+  bamYlimMax?: string
+  bamTrackHeight?: string
+  bamLabelSize?: string
+  bamAxisTextSize?: string
 }
 
 export async function runPlotGene(params: PlotGeneParams): Promise<string> {
@@ -87,6 +98,16 @@ export async function runPlotGene(params: PlotGeneParams): Promise<string> {
     highlighted_region_start: params.highlightStart ?? "",
     highlighted_region_stop: params.highlightEnd ?? "",
     highlighted_region_color: params.highlightCol ?? "",
+    bam_upload_ids: params.bamUploadIds ?? "",
+    bam_bai_ids: params.bamBaiIds ?? "",
+    bam_labels: params.bamLabels ?? "",
+    bam_fill_cols: params.bamFillCols ?? "",
+    bam_fill_alpha: params.bamFillAlpha ?? "",
+    bam_ylim_min: params.bamYlimMin ?? "",
+    bam_ylim_max: params.bamYlimMax ?? "",
+    bam_track_height: params.bamTrackHeight ?? "",
+    bam_label_size: params.bamLabelSize ?? "",
+    bam_axis_text_size: params.bamAxisTextSize ?? "",
   })
 }
 
@@ -120,6 +141,17 @@ export interface PlotRegionParams {
   highlightStart?: string
   highlightEnd?: string
   highlightCol?: string
+  // BAM coverage tracks
+  bamUploadIds?: string
+  bamBaiIds?: string
+  bamLabels?: string
+  bamFillCols?: string
+  bamFillAlpha?: string
+  bamYlimMin?: string
+  bamYlimMax?: string
+  bamTrackHeight?: string
+  bamLabelSize?: string
+  bamAxisTextSize?: string
 }
 
 export async function runPlotRegion(params: PlotRegionParams): Promise<string> {
@@ -150,6 +182,16 @@ export async function runPlotRegion(params: PlotRegionParams): Promise<string> {
     highlighted_region_start: params.highlightStart ?? "",
     highlighted_region_stop: params.highlightEnd ?? "",
     highlighted_region_color: params.highlightCol ?? "",
+    bam_upload_ids: params.bamUploadIds ?? "",
+    bam_bai_ids: params.bamBaiIds ?? "",
+    bam_labels: params.bamLabels ?? "",
+    bam_fill_cols: params.bamFillCols ?? "",
+    bam_fill_alpha: params.bamFillAlpha ?? "",
+    bam_ylim_min: params.bamYlimMin ?? "",
+    bam_ylim_max: params.bamYlimMax ?? "",
+    bam_track_height: params.bamTrackHeight ?? "",
+    bam_label_size: params.bamLabelSize ?? "",
+    bam_axis_text_size: params.bamAxisTextSize ?? "",
   })
 }
 
