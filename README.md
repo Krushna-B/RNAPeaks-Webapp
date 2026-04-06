@@ -7,5 +7,5 @@ RNAPeaks Web App is a browser-based interface for visualizing RNA-binding protei
 **Learn more in the [official documentation](https://github.com/Krushna-B/RNAPeaks).**
 
 <p align="center">
-  <img src="assets/demo.gif" alt="RNAPeaks demo" width="900" />
+  <img src="assets/demo.mov" alt="RNAPeaks demo" width="900" />
 </p>
