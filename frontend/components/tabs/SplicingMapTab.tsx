@@ -124,14 +124,14 @@ export function SplicingMapTab() {
   }
 
   async function handleRun() {
-    if (!bedUploadId || !matsUploadId) return
+    if (groups.length === 0) return
     setLoading(true)
     setError(null)
     setImageUrl(null)
     try {
       const url = await runSplicingMap({
-        bedUploadId,
-        matsUploadId,
+        bedUploadId: bedUploadId ?? "",
+        matsUploadId: matsUploadId ?? "",
         widthIntoExon,
         widthIntoIntron,
         movingAverage,
@@ -162,8 +162,7 @@ export function SplicingMapTab() {
     }
   }
 
-  const canRun =
-    !!bedUploadId && !!matsUploadId && groups.length > 0 && !loading
+  const canRun = groups.length > 0 && !loading
 
   return (
     <div className="flex h-full">
@@ -194,6 +193,11 @@ export function SplicingMapTab() {
             onUploadComplete={(id) => setBedUploadId(id)}
             onClear={() => setBedUploadId(null)}
           />
+          {!bedUploadId && (
+            <p className="-mt-2 text-[11px] text-muted-foreground">
+              No file selected - sample K562 eCLIP data will be used
+            </p>
+          )}
 
           <FileUpload
             label="SE.MATS File"
@@ -201,6 +205,11 @@ export function SplicingMapTab() {
             onUploadComplete={(id) => setMatsUploadId(id)}
             onClear={() => setMatsUploadId(null)}
           />
+          {!matsUploadId && (
+            <p className="-mt-2 text-[11px] text-muted-foreground">
+              No file selected - sample SE.MATS data will be used
+            </p>
+          )}
 
           {/* PARAMETERS */}
           <SectionLabel>Parameters</SectionLabel>

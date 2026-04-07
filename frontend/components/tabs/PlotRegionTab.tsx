@@ -15,7 +15,11 @@ import {
 } from "@/components/ui/select"
 import { FileUpload } from "@/components/FileUpload"
 import { PlotResult } from "@/components/PlotResult"
-import { BamCoveragePanel, type BamEntry, type BamGlobalSettings } from "@/components/BamCoveragePanel"
+import {
+  BamCoveragePanel,
+  type BamEntry,
+  type BamGlobalSettings,
+} from "@/components/BamCoveragePanel"
 import { runPlotRegion } from "@/lib/api"
 
 const COLOR_OPTIONS = [
@@ -130,7 +134,8 @@ export function PlotRegionTab() {
   // BAM coverage panel
   const [bamPanelOpen, setBamPanelOpen] = useState(false)
   const [bamEntries, setBamEntries] = useState<BamEntry[]>([])
-  const [bamSettings, setBamSettings] = useState<BamGlobalSettings>(DEFAULT_BAM_SETTINGS)
+  const [bamSettings, setBamSettings] =
+    useState<BamGlobalSettings>(DEFAULT_BAM_SETTINGS)
   const bamAnchorRef = useRef<HTMLButtonElement>(null)
 
   const [imageUrl, setImageUrl] = useState<string | null>(null)
@@ -142,7 +147,7 @@ export function PlotRegionTab() {
   ).length
 
   async function handleRun() {
-    if (!uploadId || !chr || !start || !end) return
+    if (!chr || !start || !end) return
     setLoading(true)
     setError(null)
     setImageUrl(null)
@@ -151,14 +156,18 @@ export function PlotRegionTab() {
         (e) => e.bamUploadId && e.baiUploadId
       )
 
-      const bamUploadIds = completeBamEntries.map((e) => e.bamUploadId!).join(",")
+      const bamUploadIds = completeBamEntries
+        .map((e) => e.bamUploadId!)
+        .join(",")
       const bamBaiIds = completeBamEntries.map((e) => e.baiUploadId!).join(",")
       // Strip commas from labels so the comma-separated encoding stays intact
-      const bamLabels = completeBamEntries.map((e) => e.label.replace(/,/g, " ")).join(",")
+      const bamLabels = completeBamEntries
+        .map((e) => e.label.replace(/,/g, " "))
+        .join(",")
       const bamFillCols = completeBamEntries.map((e) => e.fillCol).join(",")
 
       const url = await runPlotRegion({
-        uploadId,
+        uploadId: uploadId ?? "",
         gtfUploadId: gtfUploadId ?? undefined,
         species,
         chr,
@@ -203,7 +212,7 @@ export function PlotRegionTab() {
     }
   }
 
-  const canRun = !!uploadId && !!chr && !!start && !!end && !loading
+  const canRun = !!chr && !!start && !!end && !loading
 
   return (
     <div className="flex h-full">
@@ -234,6 +243,11 @@ export function PlotRegionTab() {
             onUploadComplete={(id) => setUploadId(id)}
             onClear={() => setUploadId(null)}
           />
+          {!uploadId && (
+            <p className="-mt-2 text-[11px] text-muted-foreground">
+              No file selected - sample K562 eCLIP data will be used
+            </p>
+          )}
 
           <FileUpload
             label="Custom GTF (optional)"
@@ -250,7 +264,7 @@ export function PlotRegionTab() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Human">Human (hg38)</SelectItem>
-                  <SelectItem value="Mouse">Mouse (mm10)</SelectItem>
+                  {/* <SelectItem value="Mouse">Mouse (mm10)</SelectItem> */}
                 </SelectContent>
               </Select>
             </Field>
@@ -267,7 +281,7 @@ export function PlotRegionTab() {
               <Activity className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="font-medium">BAM Coverage Tracks</span>
               {activeBamCount > 0 && (
-                <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold leading-none text-primary-foreground">
+                <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] leading-none font-bold text-primary-foreground">
                   {activeBamCount}
                 </span>
               )}
@@ -325,7 +339,7 @@ export function PlotRegionTab() {
 
           <Field
             label="Gene Label"
-            hint="Optional — displays gene name on the plot"
+            hint="Optional - displays gene name on the plot"
           >
             <Input
               placeholder="e.g. GAPDH"
@@ -337,7 +351,7 @@ export function PlotRegionTab() {
 
           <Field
             label="Transcript ID"
-            hint="Leave blank to show all transcripts"
+            hint="Leave blank to show longest transcript"
           >
             <Input
               placeholder="e.g. ENST00000123456"

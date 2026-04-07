@@ -323,7 +323,7 @@ function(req, upload_id) {
 
 #* @post /plot-gene
 #* @serializer png list(width = 1600, height = 1200, res = 150)
-function(req, upload_id, geneID, species = "Human", peak_col = "purple",
+function(req, upload_id = NULL, geneID, species = "Human", peak_col = "purple",
          order_by = "Target", five_to_three = "FALSE",
          TxID = NULL, merge = NULL, total_arrows = NULL, max_per_intron = NULL,
          gtf_upload_id = NULL, max_proteins = 40,
@@ -346,8 +346,15 @@ function(req, upload_id, geneID, species = "Human", peak_col = "purple",
         add = TRUE
       )
 
-      path <- get_upload_path(req$session_id, upload_id)
-      bed <- utils::read.table(path, header = FALSE, sep = "\t")
+      bed_id <- opt_str(upload_id)
+      if (!is.null(bed_id)) {
+        path <- get_upload_path(req$session_id, bed_id)
+        bed <- utils::read.table(path, header = FALSE, sep = "\t")
+        log_info("plot-gene: using uploaded BED upload_id=", bed_id)
+      } else {
+        bed <- RNAPeaks::sample_bed
+        log_info("plot-gene: using built-in sample_bed")
+      }
 
       # Resolve GTF: prefer uploaded custom GTF, fall back to preloaded by species
       active_gtf <- tryCatch(
@@ -433,7 +440,7 @@ function(req, upload_id, geneID, species = "Human", peak_col = "purple",
 
 #* @post /plot-region
 #* @serializer png list(width = 1600, height = 1200, res = 150)
-function(req, upload_id, Chr, Start, End, Strand, species = "Human",
+function(req, upload_id = NULL, Chr, Start, End, Strand, species = "Human",
          peak_col = "purple", order_by = "Target",
          geneID = NULL, TxID = NULL, merge = NULL, total_arrows = NULL, max_per_intron = NULL,
          exon_col = NULL, utr_col = NULL, gtf_upload_id = NULL,
@@ -456,8 +463,15 @@ function(req, upload_id, Chr, Start, End, Strand, species = "Human",
         add = TRUE
       )
 
-      path <- get_upload_path(req$session_id, upload_id)
-      bed <- utils::read.table(path, header = FALSE, sep = "\t")
+      bed_id <- opt_str(upload_id)
+      if (!is.null(bed_id)) {
+        path <- get_upload_path(req$session_id, bed_id)
+        bed <- utils::read.table(path, header = FALSE, sep = "\t")
+        log_info("plot-region: using uploaded BED upload_id=", bed_id)
+      } else {
+        bed <- RNAPeaks::sample_bed
+        log_info("plot-region: using built-in sample_bed")
+      }
 
       # Resolve GTF: prefer uploaded custom GTF, fall back to preloaded by species
       active_gtf <- tryCatch(
@@ -548,7 +562,7 @@ function(req, upload_id, Chr, Start, End, Strand, species = "Human",
 
 #* @post /splicing-map
 #* @serializer png list(width = 1400, height = 900, res = 150)
-function(req, bed_upload_id, mats_upload_id,
+function(req, bed_upload_id = NULL, mats_upload_id = NULL,
          WidthIntoExon = "50", WidthIntoIntron = "300", moving_average = "50",
          p_valueRetainedAndExclusion = NULL, p_valueControls = NULL,
          retained_IncLevelDifference = NULL, exclusion_IncLevelDifference = NULL,
@@ -559,10 +573,24 @@ function(req, bed_upload_id, mats_upload_id,
   log_info("splicing-map session=", req$session_id)
   tryCatch(
     {
-      bed_path <- get_upload_path(req$session_id, bed_upload_id)
-      mats_path <- get_upload_path(req$session_id, mats_upload_id)
-      bed <- utils::read.table(bed_path, header = FALSE, sep = "\t")
-      mats <- utils::read.table(mats_path, header = TRUE, sep = "\t")
+      bid <- opt_str(bed_upload_id)
+      if (!is.null(bid)) {
+        bed_path <- get_upload_path(req$session_id, bid)
+        bed <- utils::read.table(bed_path, header = FALSE, sep = "\t")
+        log_info("splicing-map: using uploaded BED upload_id=", bid)
+      } else {
+        bed <- RNAPeaks::sample_bed
+        log_info("splicing-map: using built-in sample_bed")
+      }
+      mid <- opt_str(mats_upload_id)
+      if (!is.null(mid)) {
+        mats_path <- get_upload_path(req$session_id, mid)
+        mats <- utils::read.table(mats_path, header = TRUE, sep = "\t")
+        log_info("splicing-map: using uploaded SE.MATS upload_id=", mid)
+      } else {
+        mats <- RNAPeaks::`sample_se.mats`
+        log_info("splicing-map: using built-in sample_se.mats")
+      }
       plot <- createSplicingMap(
         bed_file = bed, SEMATS = mats,
         WidthIntoExon = as.integer(WidthIntoExon),
@@ -603,7 +631,7 @@ function(req, bed_upload_id, mats_upload_id,
 
 #* @post /sequence-map
 #* @serializer png list(width = 1400, height = 900, res = 150)
-function(req, mats_upload_id, sequence,
+function(req, mats_upload_id = NULL, sequence,
          motif_mode = "combined",
          WidthIntoExon = "50", WidthIntoIntron = "250", moving_average = "40",
          p_valueRetainedAndExclusion = NULL, p_valueControls = NULL,
@@ -615,8 +643,15 @@ function(req, mats_upload_id, sequence,
   log_info("sequence-map session=", req$session_id, " sequence=", sequence, " motif_mode=", motif_mode)
   tryCatch(
     {
-      path <- get_upload_path(req$session_id, mats_upload_id)
-      mats <- utils::read.table(path, header = TRUE, sep = "\t")
+      mid <- opt_str(mats_upload_id)
+      if (!is.null(mid)) {
+        path <- get_upload_path(req$session_id, mid)
+        mats <- utils::read.table(path, header = TRUE, sep = "\t")
+        log_info("sequence-map: using uploaded SE.MATS upload_id=", mid)
+      } else {
+        mats <- RNAPeaks::`sample_se.mats`
+        log_info("sequence-map: using built-in sample_se.mats")
+      }
       # Parse comma-separated motifs into a character vector
       motifs <- trimws(strsplit(sequence, ",")[[1]])
       motifs <- motifs[nchar(motifs) > 0]

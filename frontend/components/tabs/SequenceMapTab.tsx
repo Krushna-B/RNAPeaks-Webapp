@@ -170,7 +170,7 @@ export function SequenceMapTab() {
   }
 
   async function handleRun() {
-    if (!matsUploadId || !sequence.trim()) return
+    if (!sequence.trim()) return
     setLoading(true)
     setError(null)
     setImageUrl(null)
@@ -183,7 +183,7 @@ export function SequenceMapTab() {
       .filter(Boolean)
 
     const commonParams = {
-      matsUploadId: matsUploadId!,
+      matsUploadId: matsUploadId ?? "",
       widthIntoExon,
       widthIntoIntron,
       movingAverage,
@@ -239,8 +239,7 @@ export function SequenceMapTab() {
     .split(",")
     .map((m) => m.trim())
     .filter(Boolean)
-  const canRun =
-    !!matsUploadId && parsedMotifs.length > 0 && groups.length > 0 && !loading
+  const canRun = parsedMotifs.length > 0 && groups.length > 0 && !loading
 
   const showCarousel =
     motifMode === "individual" &&
@@ -278,6 +277,11 @@ export function SequenceMapTab() {
             onUploadComplete={(id) => setMatsUploadId(id)}
             onClear={() => setMatsUploadId(null)}
           />
+          {!matsUploadId && (
+            <p className="-mt-2 text-[11px] text-muted-foreground">
+              No file selected - sample SE.MATS data will be used
+            </p>
+          )}
 
           {/* TARGET */}
           <SectionLabel>Target</SectionLabel>
