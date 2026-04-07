@@ -77,7 +77,7 @@ function Field({
 }) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs font-medium leading-none">{label}</Label>
+      <Label className="text-xs leading-none font-medium">{label}</Label>
       {children}
       {hint && (
         <p className="text-[11px] leading-snug text-muted-foreground">{hint}</p>
@@ -116,14 +116,18 @@ export function BamCoveragePanel({
     return () => document.removeEventListener("keydown", onKey)
   }, [open, onClose])
 
-  // Close when clicking outside both popup and trigger
+  // Close when clicking outside both popup and trigger.
+  // Radix portals Select dropdowns to document.body (outside popupRef).
+  // We detect an open dropdown by checking for a [role="listbox"] in the
+  // document — if one exists the click is inside a Select, so skip close.
   useEffect(() => {
     if (!open) return
     function onPointerDown(e: PointerEvent) {
-      const target = e.target as Node
+      const target = e.target as Element
       if (
         popupRef.current?.contains(target) ||
-        anchorRef.current?.contains(target)
+        anchorRef.current?.contains(target) ||
+        document.querySelector("[role='listbox']")
       )
         return
       onClose()
@@ -177,7 +181,7 @@ export function BamCoveragePanel({
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
         {entries.length === 0 && (
           <p className="py-4 text-center text-xs text-muted-foreground">
-            No tracks yet — click Add Track below.
+            No tracks yet - click Add Track below.
           </p>
         )}
 
@@ -187,7 +191,7 @@ export function BamCoveragePanel({
             className="space-y-3 rounded-xl border bg-muted/30 p-4"
           >
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">
+              <span className="text-[10px] font-bold tracking-widest text-muted-foreground/70 uppercase">
                 Track {idx + 1}
               </span>
               <button
@@ -312,7 +316,7 @@ export function BamCoveragePanel({
         <SectionLabel>Display Settings</SectionLabel>
 
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Fill Opacity" hint="0 – 1">
+          <Field label="Fill Opacity" hint="0 - 1">
             <Input
               type="number"
               min="0"
