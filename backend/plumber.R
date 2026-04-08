@@ -333,6 +333,7 @@ function(req, upload_id = NULL, geneID, species = "Human", peak_col = "purple",
          bam_upload_ids = NULL, bam_bai_ids = NULL, bam_labels = NULL, bam_fill_cols = NULL,
          bam_fill_alpha = NULL, bam_ylim_min = NULL, bam_ylim_max = NULL,
          bam_track_height = NULL, bam_label_size = NULL, bam_axis_text_size = NULL) {
+  geneID <- toupper(geneID)
   log_info("plot-gene session=", req$session_id, " geneID=", geneID)
   tryCatch(
     {
@@ -520,7 +521,7 @@ function(req, upload_id = NULL, Chr, Start, End, Strand, species = "Human",
         bed = bed, gtf = active_gtf, Chr = Chr,
         Start = as.integer(Start), End = as.integer(End),
         Strand = Strand,
-        geneID = opt_str(geneID, NULL),
+        geneID = if (!is.null(opt_str(geneID, NULL))) toupper(opt_str(geneID, NULL)) else NULL,
         TxID = opt_txid(TxID),
         merge = opt_int(merge, 0),
         peak_col = peak_col, order_by = order_by,
