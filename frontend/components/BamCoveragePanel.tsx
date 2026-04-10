@@ -96,7 +96,12 @@ export function BamCoveragePanel({
   onSettingsChange,
 }: BamCoveragePanelProps) {
   const popupRef = useRef<HTMLDivElement>(null)
+  const [mounted, setMounted] = useState(false)
   const [top, setTop] = useState(80)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   // Recalculate vertical position each time the popup opens
   useLayoutEffect(() => {
@@ -137,9 +142,9 @@ export function BamCoveragePanel({
   }, [open, onClose, anchorRef])
 
   // Guard for SSR — createPortal requires document.body (client-only).
-  // Using typeof instead of a mounted-state effect avoids the
-  // react-hooks/set-state-in-effect ESLint rule.
-  if (typeof document === "undefined") return null
+  // The mounted pattern ensures server and client both render null on the
+  // first pass, avoiding a hydration mismatch before the portal attaches.
+  if (!mounted) return null
 
   // The popup is always in the DOM (never unmounted) so FileUpload components
   // keep their upload state across open/close cycles. Visibility is controlled

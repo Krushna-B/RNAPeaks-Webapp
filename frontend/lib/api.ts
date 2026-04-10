@@ -284,3 +284,30 @@ export async function runSequenceMap(params: SequenceMapParams): Promise<string>
     ...mapAdvancedToRecord(params),
   })
 }
+
+// ── RI SplicingMap ─────────────────────────────────────────────────────────────
+
+export async function runRISplicingMap(params: SplicingMapParams): Promise<string> {
+  return fetchPlot("ri-splicing-map", {
+    bed_upload_id: params.bedUploadId,
+    mats_upload_id: params.matsUploadId,
+    WidthIntoExon: params.widthIntoExon,
+    WidthIntoIntron: params.widthIntoIntron,
+    moving_average: params.movingAverage,
+    ...mapAdvancedToRecord(params),
+  })
+}
+
+// ── RI SequenceMap ─────────────────────────────────────────────────────────────
+
+export async function runRISequenceMap(params: SequenceMapParams): Promise<string> {
+  return fetchPlot("ri-sequence-map", {
+    mats_upload_id: params.matsUploadId,
+    sequence: params.sequence,
+    motif_mode: params.motifMode ?? "combined",
+    WidthIntoExon: params.widthIntoExon,
+    WidthIntoIntron: params.widthIntoIntron,
+    moving_average: params.movingAverage,
+    ...mapAdvancedToRecord(params),
+  })
+}
