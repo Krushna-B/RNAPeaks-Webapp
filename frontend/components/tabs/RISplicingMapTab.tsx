@@ -29,17 +29,6 @@ const LINE_COLOR_OPTIONS = [
   { value: "gray40", label: "Gray" },
 ]
 
-const STRUCTURE_COLOR_OPTIONS = [
-  { value: "navy", label: "Navy" },
-  { value: "black", label: "Black" },
-  { value: "blue", label: "Blue" },
-  { value: "darkgreen", label: "Dark Green" },
-  { value: "red", label: "Red" },
-  { value: "gray40", label: "Gray" },
-  { value: "dark gray", label: "Dark Gray" },
-  { value: "orange", label: "Orange" },
-  { value: "purple", label: "Purple" },
-]
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -111,7 +100,6 @@ export function RISplicingMapTab() {
   const [retainedCol, setRetainedCol] = useState("blue")
   const [excludedCol, setExcludedCol] = useState("red")
   const [controlCol, setControlCol] = useState("black")
-  const [exonCol, setExonCol] = useState("navy")
 
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -149,7 +137,6 @@ export function RISplicingMapTab() {
         retainedCol,
         excludedCol,
         controlCol,
-        exonCol,
         lineWidth,
         axisTextSize,
         titleSize,
@@ -448,20 +435,6 @@ export function RISplicingMapTab() {
                 </SelectTrigger>
                 <SelectContent>
                   {LINE_COLOR_OPTIONS.map((c) => (
-                    <SelectItem key={c.value} value={c.value}>
-                      {c.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="Exon Color">
-              <Select value={exonCol} onValueChange={setExonCol}>
-                <SelectTrigger className="h-8 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {STRUCTURE_COLOR_OPTIONS.map((c) => (
                     <SelectItem key={c.value} value={c.value}>
                       {c.label}
                     </SelectItem>
