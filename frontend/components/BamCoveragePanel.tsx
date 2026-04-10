@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react"
 import { createPortal } from "react-dom"
 import { X, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -96,12 +96,12 @@ export function BamCoveragePanel({
   onSettingsChange,
 }: BamCoveragePanelProps) {
   const popupRef = useRef<HTMLDivElement>(null)
-  const [mounted, setMounted] = useState(false)
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  )
   const [top, setTop] = useState(80)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
 
   // Recalculate vertical position each time the popup opens
   useLayoutEffect(() => {
@@ -142,8 +142,9 @@ export function BamCoveragePanel({
   }, [open, onClose, anchorRef])
 
   // Guard for SSR — createPortal requires document.body (client-only).
-  // The mounted pattern ensures server and client both render null on the
-  // first pass, avoiding a hydration mismatch before the portal attaches.
+  // useSyncExternalStore returns false on the server and true on the client,
+  // so both the server render and the client's first hydration pass agree on
+  // null, eliminating the hydration mismatch without a setState-in-effect.
   if (!mounted) return null
 
   // The popup is always in the DOM (never unmounted) so FileUpload components

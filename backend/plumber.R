@@ -615,7 +615,7 @@ function(req, bed_upload_id = NULL, mats_upload_id = NULL,
         line_width = opt_num(line_width, 0.8),
         axis_text_size = opt_num(axis_text_size, 11),
         title_size = opt_num(title_size, 20),
-        cores = 1L, verbose = FALSE
+        verbose = FALSE
       )
       print(plot)
     },
@@ -679,7 +679,7 @@ function(req, mats_upload_id = NULL, sequence,
         line_width = opt_num(line_width, 0.8),
         axis_text_size = opt_num(axis_text_size, 11),
         title_size = opt_num(title_size, 20),
-        cores = 1L, verbose = FALSE
+        verbose = FALSE
       )
       print(plot)
     },
