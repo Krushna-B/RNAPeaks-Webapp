@@ -692,6 +692,139 @@ function(req, mats_upload_id = NULL, sequence,
 }
 
 
+# ── RI Splicing Map ────────────────────────────────────────────────────────────
+
+#* @post /ri-splicing-map
+#* @serializer png list(width = 1400, height = 900, res = 150)
+function(req, bed_upload_id = NULL, mats_upload_id = NULL,
+         WidthIntoExon = "50", WidthIntoIntron = "300", moving_average = "50",
+         p_valueRetainedAndExclusion = NULL, p_valueControls = NULL,
+         retained_IncLevelDifference = NULL, exclusion_IncLevelDifference = NULL,
+         Min_Count = NULL, groups = NULL, control_multiplier = NULL, control_iterations = NULL,
+         z_threshold = NULL, min_consecutive = NULL,
+         title = NULL, retained_col = NULL, excluded_col = NULL, control_col = NULL,
+         exon_col = NULL, line_width = NULL, axis_text_size = NULL, title_size = NULL) {
+  log_info("ri-splicing-map session=", req$session_id)
+  tryCatch(
+    {
+      bid <- opt_str(bed_upload_id)
+      if (!is.null(bid)) {
+        bed_path <- get_upload_path(req$session_id, bid)
+        bed <- utils::read.table(bed_path, header = FALSE, sep = "\t")
+        log_info("ri-splicing-map: using uploaded BED upload_id=", bid)
+      } else {
+        bed <- RNAPeaks::sample_bed
+        log_info("ri-splicing-map: using built-in sample_bed")
+      }
+      mid <- opt_str(mats_upload_id)
+      if (!is.null(mid)) {
+        mats_path <- get_upload_path(req$session_id, mid)
+        mats <- utils::read.table(mats_path, header = TRUE, sep = "\t")
+        log_info("ri-splicing-map: using uploaded RI.MATS upload_id=", mid)
+      } else {
+        mats <- RNAPeaks::`sample_se.mats`
+        log_info("ri-splicing-map: using built-in sample_se.mats")
+      }
+      plot <- createRetainedIntronSplicingMap(
+        bed_file = bed, RIMATS = mats,
+        WidthIntoExon = as.integer(WidthIntoExon),
+        WidthIntoIntron = as.integer(WidthIntoIntron),
+        moving_average = as.integer(moving_average),
+        p_valueRetainedAndExclusion = opt_num(p_valueRetainedAndExclusion, 0.05),
+        p_valueControls = opt_num(p_valueControls, 0.95),
+        retained_IncLevelDifference = opt_num(retained_IncLevelDifference, 0.1),
+        exclusion_IncLevelDifference = opt_num(exclusion_IncLevelDifference, -0.1),
+        Min_Count = opt_int(Min_Count, 50),
+        groups = opt_groups(groups),
+        control_multiplier = opt_num(control_multiplier, 2.0),
+        control_iterations = opt_int(control_iterations, 20),
+        z_threshold = opt_num(z_threshold, 1.96),
+        min_consecutive = opt_int(min_consecutive, 10),
+        title = opt_str(title, ""),
+        retained_col = opt_str(retained_col, "blue"),
+        excluded_col = opt_str(excluded_col, "red"),
+        control_col = opt_str(control_col, "black"),
+        exon_col = opt_str(exon_col, "navy"),
+        line_width = opt_num(line_width, 0.8),
+        axis_text_size = opt_num(axis_text_size, 11),
+        title_size = opt_num(title_size, 20),
+        verbose = FALSE
+      )
+      print(plot)
+    },
+    error = function(e) {
+      msg <- conditionMessage(e)
+      log_error("ri-splicing-map: ", msg)
+      stop(msg)
+    }
+  )
+}
+
+
+# ── RI Sequence Map ─────────────────────────────────────────────────────────────
+
+#* @post /ri-sequence-map
+#* @serializer png list(width = 1400, height = 900, res = 150)
+function(req, mats_upload_id = NULL, sequence,
+         motif_mode = "combined",
+         WidthIntoExon = "50", WidthIntoIntron = "250", moving_average = "40",
+         p_valueRetainedAndExclusion = NULL, p_valueControls = NULL,
+         retained_IncLevelDifference = NULL, exclusion_IncLevelDifference = NULL,
+         Min_Count = NULL, groups = NULL, control_multiplier = NULL, control_iterations = NULL,
+         z_threshold = NULL, min_consecutive = NULL,
+         title = NULL, retained_col = NULL, excluded_col = NULL, control_col = NULL,
+         exon_col = NULL, line_width = NULL, axis_text_size = NULL, title_size = NULL) {
+  log_info("ri-sequence-map session=", req$session_id, " sequence=", sequence, " motif_mode=", motif_mode)
+  tryCatch(
+    {
+      mid <- opt_str(mats_upload_id)
+      if (!is.null(mid)) {
+        path <- get_upload_path(req$session_id, mid)
+        mats <- utils::read.table(path, header = TRUE, sep = "\t")
+        log_info("ri-sequence-map: using uploaded RI.MATS upload_id=", mid)
+      } else {
+        mats <- RNAPeaks::`sample_se.mats`
+        log_info("ri-sequence-map: using built-in sample_se.mats")
+      }
+      # Parse comma-separated motifs into a character vector
+      motifs <- trimws(strsplit(sequence, ",")[[1]])
+      motifs <- motifs[nchar(motifs) > 0]
+      plot <- createRetainedIntronSequenceMap(
+        RIMATS = mats, sequence = motifs,
+        WidthIntoExon = as.integer(WidthIntoExon),
+        WidthIntoIntron = as.integer(WidthIntoIntron),
+        moving_average = as.integer(moving_average),
+        p_valueRetainedAndExclusion = opt_num(p_valueRetainedAndExclusion, 0.05),
+        p_valueControls = opt_num(p_valueControls, 0.95),
+        retained_IncLevelDifference = opt_num(retained_IncLevelDifference, 0.1),
+        exclusion_IncLevelDifference = opt_num(exclusion_IncLevelDifference, -0.1),
+        Min_Count = opt_int(Min_Count, 50),
+        groups = opt_groups(groups),
+        control_multiplier = opt_num(control_multiplier, 2.0),
+        control_iterations = opt_int(control_iterations, 20),
+        z_threshold = opt_num(z_threshold, 1.96),
+        min_consecutive = opt_int(min_consecutive, 10),
+        title = opt_str(title, ""),
+        retained_col = opt_str(retained_col, "blue"),
+        excluded_col = opt_str(excluded_col, "red"),
+        control_col = opt_str(control_col, "black"),
+        exon_col = opt_str(exon_col, "navy"),
+        line_width = opt_num(line_width, 0.8),
+        axis_text_size = opt_num(axis_text_size, 11),
+        title_size = opt_num(title_size, 20),
+        verbose = FALSE
+      )
+      print(plot)
+    },
+    error = function(e) {
+      msg <- conditionMessage(e)
+      log_error("ri-sequence-map: ", msg)
+      stop(msg)
+    }
+  )
+}
+
+
 # ── JIT warm-up ────────────────────────────────────────────────────────────────
 # Force R to compile and cache the hot code paths so the first real request
 # is not penalised. Runs once at worker startup after all packages are loaded.
