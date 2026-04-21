@@ -222,6 +222,15 @@ export function RISequenceMapTab() {
     }
   }
 
+  const retainedLabel = `ΔΨ > ${retainedIncLevelDiff}`
+  const excludedLabel = `ΔΨ < ${exclusionIncLevelDiff}`
+
+  const groupLabel: Record<string, string> = {
+    Retained: retainedLabel,
+    Excluded: excludedLabel,
+    Control: "Control",
+  }
+
   const parsedMotifs = sequence
     .split(",")
     .map((m) => m.trim())
@@ -364,7 +373,7 @@ export function RISequenceMapTab() {
                   checked={groups.includes(g)}
                   onCheckedChange={() => toggleGroup(g)}
                 />
-                <span className="text-sm">{g}</span>
+                <span className="text-sm">{groupLabel[g]}</span>
               </label>
             ))}
           </div>
@@ -397,7 +406,7 @@ export function RISequenceMapTab() {
           </Field>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Retained ΔInc">
+            <Field label="Retained ΔΨ">
               <Input
                 type="number"
                 step="0.01"
@@ -406,7 +415,7 @@ export function RISequenceMapTab() {
                 className="h-8 text-sm"
               />
             </Field>
-            <Field label="Excluded ΔInc">
+            <Field label="Excluded ΔΨ">
               <Input
                 type="number"
                 step="0.01"
@@ -522,7 +531,7 @@ export function RISequenceMapTab() {
           </Field>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Retained Color">
+            <Field label={`${retainedLabel} Color`}>
               <Select value={retainedCol} onValueChange={setRetainedCol}>
                 <SelectTrigger className="h-8 text-sm">
                   <SelectValue />
@@ -536,7 +545,7 @@ export function RISequenceMapTab() {
                 </SelectContent>
               </Select>
             </Field>
-            <Field label="Excluded Color">
+            <Field label={`${excludedLabel} Color`}>
               <Select value={excludedCol} onValueChange={setExcludedCol}>
                 <SelectTrigger className="h-8 text-sm">
                   <SelectValue />
