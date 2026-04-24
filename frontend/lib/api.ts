@@ -212,8 +212,7 @@ export interface MapAdvancedParams {
   groups?: string // comma-separated: "Retained,Excluded,Control"
   controlMultiplier?: string
   controlIterations?: string
-  zThreshold?: string
-  minConsecutive?: string
+  fdrThreshold?: string
   title?: string
   retainedCol?: string
   excludedCol?: string
@@ -234,8 +233,7 @@ function mapAdvancedToRecord(a: MapAdvancedParams): Record<string, string> {
     groups: a.groups ?? "",
     control_multiplier: a.controlMultiplier ?? "",
     control_iterations: a.controlIterations ?? "",
-    z_threshold: a.zThreshold ?? "",
-    min_consecutive: a.minConsecutive ?? "",
+    fdr_threshold: a.fdrThreshold ?? "",
     title: a.title ?? "",
     retained_col: a.retainedCol ?? "",
     excluded_col: a.excludedCol ?? "",
