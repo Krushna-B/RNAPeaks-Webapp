@@ -32,7 +32,9 @@ async function fetchPlot(
       const body = await res.json()
       const raw = body.error
       serverMessage = Array.isArray(raw) ? raw[0] : raw
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     throw new Error(friendlyError(res.status, serverMessage))
   }
 
@@ -44,6 +46,7 @@ async function fetchPlot(
 
 export interface PlotGeneParams {
   uploadId: string
+  bedSource?: string
   gtfUploadId?: string
   geneID: string
   species: string
@@ -64,10 +67,10 @@ export interface PlotGeneParams {
   highlightEnd?: string
   highlightCol?: string
   // BAM coverage tracks
-  bamUploadIds?: string   // comma-separated upload IDs for BAM files
-  bamBaiIds?: string      // comma-separated upload IDs for BAI index files
-  bamLabels?: string      // comma-separated track labels
-  bamFillCols?: string    // comma-separated fill colors
+  bamUploadIds?: string // comma-separated upload IDs for BAM files
+  bamBaiIds?: string // comma-separated upload IDs for BAI index files
+  bamLabels?: string // comma-separated track labels
+  bamFillCols?: string // comma-separated fill colors
   bamFillAlpha?: string
   bamYlimMin?: string
   bamYlimMax?: string
@@ -79,6 +82,7 @@ export interface PlotGeneParams {
 export async function runPlotGene(params: PlotGeneParams): Promise<string> {
   return fetchPlot("plot-gene", {
     upload_id: params.uploadId,
+    bed_source: params.bedSource ?? "",
     gtf_upload_id: params.gtfUploadId ?? "",
     geneID: params.geneID,
     species: params.species,
@@ -115,6 +119,7 @@ export async function runPlotGene(params: PlotGeneParams): Promise<string> {
 
 export interface PlotRegionParams {
   uploadId: string
+  bedSource?: string
   gtfUploadId?: string
   species?: string
   chr: string
@@ -157,6 +162,7 @@ export interface PlotRegionParams {
 export async function runPlotRegion(params: PlotRegionParams): Promise<string> {
   return fetchPlot("plot-region", {
     upload_id: params.uploadId,
+    bed_source: params.bedSource ?? "",
     gtf_upload_id: params.gtfUploadId ?? "",
     species: params.species ?? "",
     Chr: params.chr,
@@ -203,7 +209,7 @@ export interface MapAdvancedParams {
   retainedIncLevelDiff?: string
   exclusionIncLevelDiff?: string
   minCount?: string
-  groups?: string        // comma-separated: "Retained,Excluded,Control"
+  groups?: string // comma-separated: "Retained,Excluded,Control"
   controlMultiplier?: string
   controlIterations?: string
   zThreshold?: string
@@ -245,15 +251,19 @@ function mapAdvancedToRecord(a: MapAdvancedParams): Record<string, string> {
 
 export interface SplicingMapParams extends MapAdvancedParams {
   bedUploadId: string
+  bedSource?: string
   matsUploadId: string
   widthIntoExon: string
   widthIntoIntron: string
   movingAverage: string
 }
 
-export async function runSplicingMap(params: SplicingMapParams): Promise<string> {
+export async function runSplicingMap(
+  params: SplicingMapParams
+): Promise<string> {
   return fetchPlot("splicing-map", {
     bed_upload_id: params.bedUploadId,
+    bed_source: params.bedSource ?? "",
     mats_upload_id: params.matsUploadId,
     WidthIntoExon: params.widthIntoExon,
     WidthIntoIntron: params.widthIntoIntron,
@@ -273,7 +283,9 @@ export interface SequenceMapParams extends MapAdvancedParams {
   movingAverage: string
 }
 
-export async function runSequenceMap(params: SequenceMapParams): Promise<string> {
+export async function runSequenceMap(
+  params: SequenceMapParams
+): Promise<string> {
   return fetchPlot("sequence-map", {
     mats_upload_id: params.matsUploadId,
     sequence: params.sequence,
@@ -287,9 +299,12 @@ export async function runSequenceMap(params: SequenceMapParams): Promise<string>
 
 // ── RI SplicingMap ─────────────────────────────────────────────────────────────
 
-export async function runRISplicingMap(params: SplicingMapParams): Promise<string> {
+export async function runRISplicingMap(
+  params: SplicingMapParams
+): Promise<string> {
   return fetchPlot("ri-splicing-map", {
     bed_upload_id: params.bedUploadId,
+    bed_source: params.bedSource ?? "",
     mats_upload_id: params.matsUploadId,
     WidthIntoExon: params.widthIntoExon,
     WidthIntoIntron: params.widthIntoIntron,
@@ -300,7 +315,9 @@ export async function runRISplicingMap(params: SplicingMapParams): Promise<strin
 
 // ── RI SequenceMap ─────────────────────────────────────────────────────────────
 
-export async function runRISequenceMap(params: SequenceMapParams): Promise<string> {
+export async function runRISequenceMap(
+  params: SequenceMapParams
+): Promise<string> {
   return fetchPlot("ri-sequence-map", {
     mats_upload_id: params.matsUploadId,
     sequence: params.sequence,

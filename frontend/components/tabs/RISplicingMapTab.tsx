@@ -64,6 +64,7 @@ function Field({
 const ALL_GROUPS = ["Retained", "Excluded", "Control"] as const
 
 export function RISplicingMapTab() {
+  const [bedSource, setBedSource] = useState<"K562" | "HepG2" | "upload">("K562")
   const [bedUploadId, setBedUploadId] = useState<string | null>(null)
   const [matsUploadId, setMatsUploadId] = useState<string | null>(null)
 
@@ -118,7 +119,8 @@ export function RISplicingMapTab() {
     setImageUrl(null)
     try {
       const url = await runRISplicingMap({
-        bedUploadId: bedUploadId ?? "",
+        bedUploadId: bedSource === "upload" ? (bedUploadId ?? "") : "",
+        bedSource: bedSource !== "upload" ? bedSource : undefined,
         matsUploadId: matsUploadId ?? "",
         widthIntoExon,
         widthIntoIntron,
@@ -183,17 +185,35 @@ export function RISplicingMapTab() {
           {/* DATA FILES */}
           <SectionLabel>Data Files</SectionLabel>
 
-          <FileUpload
-            label="BED File"
-            accept=".bed"
-            onUploadComplete={(id) => setBedUploadId(id)}
-            onClear={() => setBedUploadId(null)}
-          />
-          {!bedUploadId && (
-            <p className="-mt-2 text-[11px] text-muted-foreground">
-              No file selected - sample K562 eCLIP data will be used
-            </p>
-          )}
+          <div className="space-y-2">
+            <p className="text-xs font-medium">BED File</p>
+            <div className="flex gap-4">
+              {(["K562", "HepG2"] as const).map((src) => (
+                <label key={src} className="flex cursor-pointer items-center gap-1.5">
+                  <Checkbox
+                    checked={bedSource === src}
+                    onCheckedChange={() => { setBedSource(src); setBedUploadId(null) }}
+                  />
+                  <span className="text-sm">{src} (default)</span>
+                </label>
+              ))}
+              <label className="flex cursor-pointer items-center gap-1.5">
+                <Checkbox
+                  checked={bedSource === "upload"}
+                  onCheckedChange={() => setBedSource("upload")}
+                />
+                <span className="text-sm">Upload own</span>
+              </label>
+            </div>
+            {bedSource === "upload" && (
+              <FileUpload
+                label=""
+                accept=".bed"
+                onUploadComplete={(id) => setBedUploadId(id)}
+                onClear={() => setBedUploadId(null)}
+              />
+            )}
+          </div>
 
           <FileUpload
             label="RI.MATS File"
