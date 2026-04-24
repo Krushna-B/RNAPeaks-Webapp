@@ -75,6 +75,7 @@ function Field({
 const ALL_GROUPS = ["Retained", "Excluded", "Control"] as const
 
 export function SplicingMapTab() {
+  const [bedSource, setBedSource] = useState<"K562" | "HepG2" | "upload">("K562")
   const [bedUploadId, setBedUploadId] = useState<string | null>(null)
   const [matsUploadId, setMatsUploadId] = useState<string | null>(null)
 
@@ -100,8 +101,7 @@ export function SplicingMapTab() {
   const [controlIterations, setControlIterations] = useState("20")
 
   // Significance
-  const [zThreshold, setZThreshold] = useState("1.96")
-  const [minConsecutive, setMinConsecutive] = useState("10")
+  const [fdrThreshold, setFdrThreshold] = useState("0.05")
 
   // Appearance
   const [title, setTitle] = useState("")
@@ -130,7 +130,8 @@ export function SplicingMapTab() {
     setImageUrl(null)
     try {
       const url = await runSplicingMap({
-        bedUploadId: bedUploadId ?? "",
+        bedUploadId: bedSource === "upload" ? (bedUploadId ?? "") : "",
+        bedSource: bedSource !== "upload" ? bedSource : undefined,
         matsUploadId: matsUploadId ?? "",
         widthIntoExon,
         widthIntoIntron,
@@ -143,8 +144,7 @@ export function SplicingMapTab() {
         groups: groups.join(","),
         controlMultiplier,
         controlIterations,
-        zThreshold,
-        minConsecutive,
+        fdrThreshold,
         title,
         retainedCol,
         excludedCol,
@@ -196,17 +196,35 @@ export function SplicingMapTab() {
           {/* DATA FILES */}
           <SectionLabel>Data Files</SectionLabel>
 
-          <FileUpload
-            label="BED File"
-            accept=".bed"
-            onUploadComplete={(id) => setBedUploadId(id)}
-            onClear={() => setBedUploadId(null)}
-          />
-          {!bedUploadId && (
-            <p className="-mt-2 text-[11px] text-muted-foreground">
-              No file selected - sample K562 eCLIP data will be used
-            </p>
-          )}
+          <div className="space-y-2">
+            <p className="text-xs font-medium">BED File</p>
+            <div className="flex gap-4">
+              {(["K562", "HepG2"] as const).map((src) => (
+                <label key={src} className="flex cursor-pointer items-center gap-1.5">
+                  <Checkbox
+                    checked={bedSource === src}
+                    onCheckedChange={() => { setBedSource(src); setBedUploadId(null) }}
+                  />
+                  <span className="text-sm">{src} (default)</span>
+                </label>
+              ))}
+              <label className="flex cursor-pointer items-center gap-1.5">
+                <Checkbox
+                  checked={bedSource === "upload"}
+                  onCheckedChange={() => setBedSource("upload")}
+                />
+                <span className="text-sm">Upload own</span>
+              </label>
+            </div>
+            {bedSource === "upload" && (
+              <FileUpload
+                label=""
+                accept=".bed"
+                onUploadComplete={(id) => setBedUploadId(id)}
+                onClear={() => setBedUploadId(null)}
+              />
+            )}
+          </div>
 
           <FileUpload
             label="SE.MATS File"
@@ -269,6 +287,47 @@ export function SplicingMapTab() {
             ))}
           </div>
 
+          {/* SIGNIFICANCE */}
+          <SectionLabel>Significance</SectionLabel>
+
+          <Field label="FDR Threshold">
+            <Input
+              type="number"
+              min="0"
+              max="1"
+              step="0.01"
+              value={fdrThreshold}
+              onChange={(e) => setFdrThreshold(e.target.value)}
+              className="h-8 text-sm"
+            />
+          </Field>
+
+          {/* CONTROL SAMPLING */}
+          <SectionLabel>Control Sampling</SectionLabel>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Multiplier">
+              <Input
+                type="number"
+                min="0.1"
+                step="0.1"
+                value={controlMultiplier}
+                onChange={(e) => setControlMultiplier(e.target.value)}
+                className="h-8 text-sm"
+              />
+            </Field>
+            <Field label="Iterations">
+              <Input
+                type="number"
+                min="1"
+                step="1"
+                value={controlIterations}
+                onChange={(e) => setControlIterations(e.target.value)}
+                className="h-8 text-sm"
+              />
+            </Field>
+          </div>
+
           {/* STATISTICAL FILTERS */}
           <SectionLabel>Statistical Filters</SectionLabel>
 
@@ -326,56 +385,6 @@ export function SplicingMapTab() {
               className="h-8 text-sm"
             />
           </Field>
-
-          {/* CONTROL SAMPLING */}
-          <SectionLabel>Control Sampling</SectionLabel>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Multiplier">
-              <Input
-                type="number"
-                min="0.1"
-                step="0.1"
-                value={controlMultiplier}
-                onChange={(e) => setControlMultiplier(e.target.value)}
-                className="h-8 text-sm"
-              />
-            </Field>
-            <Field label="Iterations">
-              <Input
-                type="number"
-                min="1"
-                step="1"
-                value={controlIterations}
-                onChange={(e) => setControlIterations(e.target.value)}
-                className="h-8 text-sm"
-              />
-            </Field>
-          </div>
-
-          {/* SIGNIFICANCE */}
-          <SectionLabel>Significance</SectionLabel>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Z Threshold">
-              <Input
-                type="number"
-                step="0.01"
-                value={zThreshold}
-                onChange={(e) => setZThreshold(e.target.value)}
-                className="h-8 text-sm"
-              />
-            </Field>
-            <Field label="Min Consecutive">
-              <Input
-                type="number"
-                min="1"
-                value={minConsecutive}
-                onChange={(e) => setMinConsecutive(e.target.value)}
-                className="h-8 text-sm"
-              />
-            </Field>
-          </div>
 
           {/* APPEARANCE */}
           <SectionLabel>Appearance</SectionLabel>

@@ -71,26 +71,46 @@ get_upload_path <- function(session_id, upload_id) {
   path
 }
 
+# ── BED resolver ───────────────────────────────────────────────────────────────
+# Priority: uploaded file > bed_source ("K562" | "HepG2") > K562 default
+resolve_bed <- function(req, upload_id, bed_source, endpoint) {
+  bid <- opt_str(upload_id)
+  if (!is.null(bid)) {
+    path <- get_upload_path(req$session_id, bid)
+    bed <- utils::read.table(path, header = FALSE, sep = "\t")
+    log_info(endpoint, ": using uploaded BED upload_id=", bid)
+  } else if (identical(opt_str(bed_source), "HepG2")) {
+    bed <- RNAPeaks::HepG2_bed
+    log_info(endpoint, ": using built-in HepG2_bed")
+  } else {
+    bed <- RNAPeaks::K562_bed
+    log_info(endpoint, ": using built-in K562_bed")
+  }
+  bed
+}
+
 # ── BAM helper ─────────────────────────────────────────────────────────────────
 # Resolves comma-separated BAM/BAI upload IDs into a named bam_files vector
 # suitable for PlotGene / PlotRegion.  Each pair is symlinked into a temp dir
 # so Rsamtools can find the <name>.bam.bai index alongside the BAM.
 prepare_bam_files <- function(session_id, bam_ids_str, bai_ids_str, labels_str, fill_cols_str) {
-  bam_ids  <- trimws(strsplit(bam_ids_str,  ",", fixed = TRUE)[[1]])
-  bai_ids  <- trimws(strsplit(bai_ids_str,  ",", fixed = TRUE)[[1]])
-  labels   <- trimws(strsplit(labels_str,   ",", fixed = TRUE)[[1]])
+  bam_ids <- trimws(strsplit(bam_ids_str, ",", fixed = TRUE)[[1]])
+  bai_ids <- trimws(strsplit(bai_ids_str, ",", fixed = TRUE)[[1]])
+  labels <- trimws(strsplit(labels_str, ",", fixed = TRUE)[[1]])
   fill_cols <- trimws(strsplit(fill_cols_str, ",", fixed = TRUE)[[1]])
 
   n <- length(bam_ids)
-  if (n == 0 || nchar(bam_ids[1]) == 0) return(NULL)
+  if (n == 0 || nchar(bam_ids[1]) == 0) {
+    return(NULL)
+  }
 
   # Pad shorter vectors to length n
-  if (length(bai_ids)   < n) bai_ids   <- rep_len(bai_ids,   n)
-  if (length(labels)    < n) labels    <- rep_len(labels,    n)
+  if (length(bai_ids) < n) bai_ids <- rep_len(bai_ids, n)
+  if (length(labels) < n) labels <- rep_len(labels, n)
   if (length(fill_cols) < n) fill_cols <- rep_len(fill_cols, n)
 
   bam_paths <- character(n)
-  tmp_dirs  <- character(n)
+  tmp_dirs <- character(n)
 
   for (i in seq_len(n)) {
     bam_src <- get_upload_path(session_id, bam_ids[i])
@@ -323,7 +343,7 @@ function(req, upload_id) {
 
 #* @post /plot-gene
 #* @serializer png list(width = 1600, height = 1200, res = 150)
-function(req, upload_id = NULL, geneID, species = "Human", peak_col = "purple",
+function(req, upload_id = NULL, bed_source = NULL, geneID, species = "Human", peak_col = "purple",
          order_by = "Target", five_to_three = "FALSE",
          TxID = NULL, merge = NULL, total_arrows = NULL, max_per_intron = NULL,
          gtf_upload_id = NULL, max_proteins = 40,
@@ -347,15 +367,7 @@ function(req, upload_id = NULL, geneID, species = "Human", peak_col = "purple",
         add = TRUE
       )
 
-      bed_id <- opt_str(upload_id)
-      if (!is.null(bed_id)) {
-        path <- get_upload_path(req$session_id, bed_id)
-        bed <- utils::read.table(path, header = FALSE, sep = "\t")
-        log_info("plot-gene: using uploaded BED upload_id=", bed_id)
-      } else {
-        bed <- RNAPeaks::sample_bed
-        log_info("plot-gene: using built-in sample_bed")
-      }
+      bed <- resolve_bed(req, upload_id, bed_source, "plot-gene")
 
       # Resolve GTF: prefer uploaded custom GTF, fall back to preloaded by species
       active_gtf <- tryCatch(
@@ -380,10 +392,10 @@ function(req, upload_id = NULL, geneID, species = "Human", peak_col = "purple",
       if (!is.null(opt_str(bam_upload_ids)) && !is.null(opt_str(bam_bai_ids))) {
         bam_info <- tryCatch(
           prepare_bam_files(
-            session_id   = req$session_id,
-            bam_ids_str  = opt_str(bam_upload_ids, ""),
-            bai_ids_str  = opt_str(bam_bai_ids, ""),
-            labels_str   = opt_str(bam_labels, ""),
+            session_id = req$session_id,
+            bam_ids_str = opt_str(bam_upload_ids, ""),
+            bai_ids_str = opt_str(bam_bai_ids, ""),
+            labels_str = opt_str(bam_labels, ""),
             fill_cols_str = opt_str(bam_fill_cols, "steelblue")
           ),
           error = function(e) {
@@ -398,7 +410,9 @@ function(req, upload_id = NULL, geneID, species = "Human", peak_col = "purple",
 
       resolved_bam_ylim <- if (!is.null(opt_str(bam_ylim_min)) && !is.null(opt_str(bam_ylim_max))) {
         c(as.numeric(bam_ylim_min), as.numeric(bam_ylim_max))
-      } else NULL
+      } else {
+        NULL
+      }
 
       result <- PlotGene(
         bed = bed, geneID = geneID, gtf = active_gtf, species = species,
@@ -441,7 +455,7 @@ function(req, upload_id = NULL, geneID, species = "Human", peak_col = "purple",
 
 #* @post /plot-region
 #* @serializer png list(width = 1600, height = 1200, res = 150)
-function(req, upload_id = NULL, Chr, Start, End, Strand, species = "Human",
+function(req, upload_id = NULL, bed_source = NULL, Chr, Start, End, Strand, species = "Human",
          peak_col = "purple", order_by = "Target",
          geneID = NULL, TxID = NULL, merge = NULL, total_arrows = NULL, max_per_intron = NULL,
          exon_col = NULL, utr_col = NULL, gtf_upload_id = NULL,
@@ -464,15 +478,7 @@ function(req, upload_id = NULL, Chr, Start, End, Strand, species = "Human",
         add = TRUE
       )
 
-      bed_id <- opt_str(upload_id)
-      if (!is.null(bed_id)) {
-        path <- get_upload_path(req$session_id, bed_id)
-        bed <- utils::read.table(path, header = FALSE, sep = "\t")
-        log_info("plot-region: using uploaded BED upload_id=", bed_id)
-      } else {
-        bed <- RNAPeaks::sample_bed
-        log_info("plot-region: using built-in sample_bed")
-      }
+      bed <- resolve_bed(req, upload_id, bed_source, "plot-region")
 
       # Resolve GTF: prefer uploaded custom GTF, fall back to preloaded by species
       active_gtf <- tryCatch(
@@ -515,7 +521,9 @@ function(req, upload_id = NULL, Chr, Start, End, Strand, species = "Human",
 
       resolved_bam_ylim <- if (!is.null(opt_str(bam_ylim_min)) && !is.null(opt_str(bam_ylim_max))) {
         c(as.numeric(bam_ylim_min), as.numeric(bam_ylim_max))
-      } else NULL
+      } else {
+        NULL
+      }
 
       result <- PlotRegion(
         bed = bed, gtf = active_gtf, Chr = Chr,
@@ -563,26 +571,18 @@ function(req, upload_id = NULL, Chr, Start, End, Strand, species = "Human",
 
 #* @post /splicing-map
 #* @serializer png list(width = 1400, height = 900, res = 150)
-function(req, bed_upload_id = NULL, mats_upload_id = NULL,
+function(req, bed_upload_id = NULL, bed_source = NULL, mats_upload_id = NULL,
          WidthIntoExon = "50", WidthIntoIntron = "300", moving_average = "50",
          p_valueRetainedAndExclusion = NULL, p_valueControls = NULL,
          retained_IncLevelDifference = NULL, exclusion_IncLevelDifference = NULL,
          Min_Count = NULL, groups = NULL, control_multiplier = NULL, control_iterations = NULL,
-         z_threshold = NULL, min_consecutive = NULL,
+         fdr_threshold = NULL,
          title = NULL, retained_col = NULL, excluded_col = NULL, control_col = NULL,
          exon_col = NULL, line_width = NULL, axis_text_size = NULL, title_size = NULL) {
   log_info("splicing-map session=", req$session_id)
   tryCatch(
     {
-      bid <- opt_str(bed_upload_id)
-      if (!is.null(bid)) {
-        bed_path <- get_upload_path(req$session_id, bid)
-        bed <- utils::read.table(bed_path, header = FALSE, sep = "\t")
-        log_info("splicing-map: using uploaded BED upload_id=", bid)
-      } else {
-        bed <- RNAPeaks::sample_bed
-        log_info("splicing-map: using built-in sample_bed")
-      }
+      bed <- resolve_bed(req, bed_upload_id, bed_source, "splicing-map")
       mid <- opt_str(mats_upload_id)
       if (!is.null(mid)) {
         mats_path <- get_upload_path(req$session_id, mid)
@@ -605,8 +605,8 @@ function(req, bed_upload_id = NULL, mats_upload_id = NULL,
         groups = opt_groups(groups),
         control_multiplier = opt_num(control_multiplier, 2.0),
         control_iterations = opt_int(control_iterations, 20),
-        z_threshold = opt_num(z_threshold, 1.96),
-        min_consecutive = opt_int(min_consecutive, 10),
+        use_fdr = TRUE, one_sided = TRUE, show_significance = TRUE, min_consecutive = 10L,
+        fdr_threshold = opt_num(fdr_threshold, 0.05),
         title = opt_str(title, ""),
         retained_col = opt_str(retained_col, "blue"),
         excluded_col = opt_str(excluded_col, "red"),
@@ -638,7 +638,7 @@ function(req, mats_upload_id = NULL, sequence,
          p_valueRetainedAndExclusion = NULL, p_valueControls = NULL,
          retained_IncLevelDifference = NULL, exclusion_IncLevelDifference = NULL,
          Min_Count = NULL, groups = NULL, control_multiplier = NULL, control_iterations = NULL,
-         z_threshold = NULL, min_consecutive = NULL,
+         fdr_threshold = NULL,
          title = NULL, retained_col = NULL, excluded_col = NULL, control_col = NULL,
          exon_col = NULL, line_width = NULL, axis_text_size = NULL, title_size = NULL) {
   log_info("sequence-map session=", req$session_id, " sequence=", sequence, " motif_mode=", motif_mode)
@@ -669,8 +669,8 @@ function(req, mats_upload_id = NULL, sequence,
         groups = opt_groups(groups),
         control_multiplier = opt_num(control_multiplier, 2.0),
         control_iterations = opt_int(control_iterations, 20),
-        z_threshold = opt_num(z_threshold, 1.96),
-        min_consecutive = opt_int(min_consecutive, 10),
+        use_fdr = TRUE, one_sided = TRUE, show_significance = TRUE, min_consecutive = 10L,
+        fdr_threshold = opt_num(fdr_threshold, 0.05),
         title = opt_str(title, ""),
         retained_col = opt_str(retained_col, "blue"),
         excluded_col = opt_str(excluded_col, "red"),
@@ -696,26 +696,18 @@ function(req, mats_upload_id = NULL, sequence,
 
 #* @post /ri-splicing-map
 #* @serializer png list(width = 1400, height = 900, res = 150)
-function(req, bed_upload_id = NULL, mats_upload_id = NULL,
+function(req, bed_upload_id = NULL, bed_source = NULL, mats_upload_id = NULL,
          WidthIntoExon = "50", WidthIntoIntron = "300", moving_average = "50",
          p_valueRetainedAndExclusion = NULL, p_valueControls = NULL,
          retained_IncLevelDifference = NULL, exclusion_IncLevelDifference = NULL,
          Min_Count = NULL, groups = NULL, control_multiplier = NULL, control_iterations = NULL,
-         z_threshold = NULL, min_consecutive = NULL,
+         fdr_threshold = NULL,
          title = NULL, retained_col = NULL, excluded_col = NULL, control_col = NULL,
          exon_col = NULL, line_width = NULL, axis_text_size = NULL, title_size = NULL) {
   log_info("ri-splicing-map session=", req$session_id)
   tryCatch(
     {
-      bid <- opt_str(bed_upload_id)
-      if (!is.null(bid)) {
-        bed_path <- get_upload_path(req$session_id, bid)
-        bed <- utils::read.table(bed_path, header = FALSE, sep = "\t")
-        log_info("ri-splicing-map: using uploaded BED upload_id=", bid)
-      } else {
-        bed <- RNAPeaks::sample_bed
-        log_info("ri-splicing-map: using built-in sample_bed")
-      }
+      bed <- resolve_bed(req, bed_upload_id, bed_source, "ri-splicing-map")
       mid <- opt_str(mats_upload_id)
       if (!is.null(mid)) {
         mats_path <- get_upload_path(req$session_id, mid)
@@ -738,8 +730,8 @@ function(req, bed_upload_id = NULL, mats_upload_id = NULL,
         groups = opt_groups(groups),
         control_multiplier = opt_num(control_multiplier, 2.0),
         control_iterations = opt_int(control_iterations, 20),
-        z_threshold = opt_num(z_threshold, 1.96),
-        min_consecutive = opt_int(min_consecutive, 10),
+        use_fdr = TRUE, one_sided = TRUE, show_significance = TRUE, min_consecutive = 10L,
+        fdr_threshold = opt_num(fdr_threshold, 0.05),
         title = opt_str(title, ""),
         retained_col = opt_str(retained_col, "blue"),
         excluded_col = opt_str(excluded_col, "red"),
@@ -771,7 +763,7 @@ function(req, mats_upload_id = NULL, sequence,
          p_valueRetainedAndExclusion = NULL, p_valueControls = NULL,
          retained_IncLevelDifference = NULL, exclusion_IncLevelDifference = NULL,
          Min_Count = NULL, groups = NULL, control_multiplier = NULL, control_iterations = NULL,
-         z_threshold = NULL, min_consecutive = NULL,
+         fdr_threshold = NULL,
          title = NULL, retained_col = NULL, excluded_col = NULL, control_col = NULL,
          exon_col = NULL, line_width = NULL, axis_text_size = NULL, title_size = NULL) {
   log_info("ri-sequence-map session=", req$session_id, " sequence=", sequence, " motif_mode=", motif_mode)
@@ -802,8 +794,8 @@ function(req, mats_upload_id = NULL, sequence,
         groups = opt_groups(groups),
         control_multiplier = opt_num(control_multiplier, 2.0),
         control_iterations = opt_int(control_iterations, 20),
-        z_threshold = opt_num(z_threshold, 1.96),
-        min_consecutive = opt_int(min_consecutive, 10),
+        use_fdr = TRUE, one_sided = TRUE, show_significance = TRUE, min_consecutive = 10L,
+        fdr_threshold = opt_num(fdr_threshold, 0.05),
         title = opt_str(title, ""),
         retained_col = opt_str(retained_col, "blue"),
         excluded_col = opt_str(excluded_col, "red"),
