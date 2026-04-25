@@ -141,8 +141,7 @@ export function SequenceMapTab() {
   const [controlIterations, setControlIterations] = useState("20")
 
   // Significance
-  const [zThreshold, setZThreshold] = useState("1.96")
-  const [minConsecutive, setMinConsecutive] = useState("10")
+  const [fdrThreshold, setFdrThreshold] = useState("0.05")
 
   // Appearance
   const [title, setTitle] = useState("")
@@ -195,8 +194,7 @@ export function SequenceMapTab() {
       groups: groups.join(","),
       controlMultiplier,
       controlIterations,
-      zThreshold,
-      minConsecutive,
+      fdrThreshold,
       title,
       retainedCol,
       excludedCol,
@@ -391,6 +389,47 @@ export function SequenceMapTab() {
             ))}
           </div>
 
+          {/* SIGNIFICANCE */}
+          <SectionLabel>Significance</SectionLabel>
+
+          <Field label="FDR Threshold">
+            <Input
+              type="number"
+              min="0"
+              max="1"
+              step="0.01"
+              value={fdrThreshold}
+              onChange={(e) => setFdrThreshold(e.target.value)}
+              className="h-8 text-sm"
+            />
+          </Field>
+
+          {/* CONTROL SAMPLING */}
+          <SectionLabel>Control Sampling</SectionLabel>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Multiplier">
+              <Input
+                type="number"
+                min="0.1"
+                step="0.1"
+                value={controlMultiplier}
+                onChange={(e) => setControlMultiplier(e.target.value)}
+                className="h-8 text-sm"
+              />
+            </Field>
+            <Field label="Iterations">
+              <Input
+                type="number"
+                min="1"
+                step="1"
+                value={controlIterations}
+                onChange={(e) => setControlIterations(e.target.value)}
+                className="h-8 text-sm"
+              />
+            </Field>
+          </div>
+
           {/* STATISTICAL FILTERS */}
           <SectionLabel>Statistical Filters</SectionLabel>
 
@@ -448,56 +487,6 @@ export function SequenceMapTab() {
               className="h-8 text-sm"
             />
           </Field>
-
-          {/* CONTROL SAMPLING */}
-          <SectionLabel>Control Sampling</SectionLabel>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Multiplier">
-              <Input
-                type="number"
-                min="0.1"
-                step="0.1"
-                value={controlMultiplier}
-                onChange={(e) => setControlMultiplier(e.target.value)}
-                className="h-8 text-sm"
-              />
-            </Field>
-            <Field label="Iterations">
-              <Input
-                type="number"
-                min="1"
-                step="1"
-                value={controlIterations}
-                onChange={(e) => setControlIterations(e.target.value)}
-                className="h-8 text-sm"
-              />
-            </Field>
-          </div>
-
-          {/* SIGNIFICANCE */}
-          <SectionLabel>Significance</SectionLabel>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Z Threshold">
-              <Input
-                type="number"
-                step="0.01"
-                value={zThreshold}
-                onChange={(e) => setZThreshold(e.target.value)}
-                className="h-8 text-sm"
-              />
-            </Field>
-            <Field label="Min Consecutive">
-              <Input
-                type="number"
-                min="1"
-                value={minConsecutive}
-                onChange={(e) => setMinConsecutive(e.target.value)}
-                className="h-8 text-sm"
-              />
-            </Field>
-          </div>
 
           {/* APPEARANCE */}
           <SectionLabel>Appearance</SectionLabel>
