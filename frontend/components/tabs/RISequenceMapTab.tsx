@@ -384,7 +384,7 @@ export function RISequenceMapTab() {
               type="number"
               min="0"
               max="1"
-              step="0.01"
+              step="any"
               value={fdrThreshold}
               onChange={(e) => setFdrThreshold(e.target.value)}
               className="h-8 text-sm"
