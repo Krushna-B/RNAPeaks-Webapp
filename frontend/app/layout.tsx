@@ -29,7 +29,7 @@ export default function RootLayout({
         geist.variable
       )}
     >
-      <body className="h-full overflow-hidden">
+      <body className="h-full overflow-hidden" suppressHydrationWarning>
         <Analytics />
         <SpeedInsights />
         <ThemeProvider>{children}</ThemeProvider>

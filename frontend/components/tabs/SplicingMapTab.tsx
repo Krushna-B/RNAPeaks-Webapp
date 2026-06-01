@@ -72,7 +72,7 @@ function Field({
   )
 }
 
-const ALL_GROUPS = ["Retained", "Excluded", "Control"] as const
+const ALL_GROUPS = ["Positive", "Negative", "Control"] as const
 
 export function SplicingMapTab() {
   const [bedSource, setBedSource] = useState<"K562" | "HepG2" | "upload">("K562")
@@ -91,8 +91,8 @@ export function SplicingMapTab() {
   const [exclusionIncLevelDiff, setExclusionIncLevelDiff] = useState("-0.1")
   const [minCount, setMinCount] = useState("50")
   const [groups, setGroups] = useState<string[]>([
-    "Retained",
-    "Excluded",
+    "Positive",
+    "Negative",
     "Control",
   ])
 
@@ -168,8 +168,8 @@ export function SplicingMapTab() {
   const excludedLabel = `ΔΨ < ${exclusionIncLevelDiff}`
 
   const groupLabel: Record<string, string> = {
-    Retained: retainedLabel,
-    Excluded: excludedLabel,
+    Positive: retainedLabel,
+    Negative: excludedLabel,
     Control: "Control",
   }
 

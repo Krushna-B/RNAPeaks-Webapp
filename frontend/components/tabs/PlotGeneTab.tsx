@@ -20,6 +20,13 @@ import {
   type BamEntry,
   type BamGlobalSettings,
 } from "@/components/BamCoveragePanel"
+import {
+  BedSelector,
+  bedParams,
+  hasBed,
+  EMPTY_BED_SELECTION,
+  type BedSelection,
+} from "@/components/BedSelector"
 import { runPlotGene } from "@/lib/api"
 
 const COLOR_OPTIONS = [
@@ -82,12 +89,9 @@ const DEFAULT_BAM_SETTINGS: BamGlobalSettings = {
 
 export function PlotGeneTab() {
   // Files
-  const [bedSource, setBedSource] = useState<"K562" | "HepG2" | "upload">(
-    "K562"
-  )
-  const [uploadId, setUploadId] = useState<string | null>(null)
+  const [bed, setBed] = useState<BedSelection>(EMPTY_BED_SELECTION)
   const [gtfUploadId, setGtfUploadId] = useState<string | null>(null)
-  const [species, setSpecies] = useState("Human")
+  const [species, setSpecies] = useState("hg38")
 
   // Target
   const [geneID, setGeneID] = useState("")
@@ -156,8 +160,7 @@ export function PlotGeneTab() {
       const bamFillCols = completeBamEntries.map((e) => e.fillCol).join(",")
 
       const url = await runPlotGene({
-        uploadId: bedSource === "upload" ? (uploadId ?? "") : "",
-        bedSource: bedSource !== "upload" ? bedSource : undefined,
+        ...bedParams(bed),
         gtfUploadId: gtfUploadId ?? undefined,
         geneID: geneID.trim(),
         species,
@@ -196,7 +199,7 @@ export function PlotGeneTab() {
     }
   }
 
-  const canRun = !!geneID.trim() && !loading
+  const canRun = !!geneID.trim() && hasBed(bed) && !loading
 
   return (
     <div className="flex h-full">
@@ -221,41 +224,7 @@ export function PlotGeneTab() {
           {/* DATA FILES */}
           <SectionLabel>Data Files</SectionLabel>
 
-          <div className="space-y-2">
-            <p className="text-xs font-medium">BED File</p>
-            <div className="flex gap-4">
-              {(["K562", "HepG2"] as const).map((src) => (
-                <label
-                  key={src}
-                  className="flex cursor-pointer items-center gap-1.5"
-                >
-                  <Checkbox
-                    checked={bedSource === src}
-                    onCheckedChange={() => {
-                      setBedSource(src)
-                      setUploadId(null)
-                    }}
-                  />
-                  <span className="text-sm">{src} (default)</span>
-                </label>
-              ))}
-              <label className="flex cursor-pointer items-center gap-1.5">
-                <Checkbox
-                  checked={bedSource === "upload"}
-                  onCheckedChange={() => setBedSource("upload")}
-                />
-                <span className="text-sm">Upload own</span>
-              </label>
-            </div>
-            {bedSource === "upload" && (
-              <FileUpload
-                label=""
-                accept=".bed"
-                onUploadComplete={(id) => setUploadId(id)}
-                onClear={() => setUploadId(null)}
-              />
-            )}
-          </div>
+          <BedSelector value={bed} onChange={setBed} />
 
           <FileUpload
             label="Custom GTF (optional)"
@@ -271,8 +240,9 @@ export function PlotGeneTab() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Human">Human</SelectItem>
-                  <SelectItem value="Mouse">Mouse</SelectItem>
+                  <SelectItem value="hg38">Human (hg38)</SelectItem>
+                  <SelectItem value="mm10">Mouse (mm10)</SelectItem>
+                  <SelectItem value="mm39">Mouse (mm39)</SelectItem>
                 </SelectContent>
               </Select>
             </Field>

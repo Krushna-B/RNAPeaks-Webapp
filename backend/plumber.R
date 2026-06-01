@@ -24,7 +24,18 @@ opt_num <- function(x, default) {
 }
 opt_groups <- function(x) {
   v <- opt_str(x)
-  if (is.null(v)) c("Retained", "Excluded", "Control") else strsplit(v, ",")[[1]]
+  if (is.null(v)) c("Negative", "Positive", "Control") else strsplit(v, ",")[[1]]
+}
+# Translate legacy group names to the new RNAPeaks vocabulary so older clients
+# (or cached frontends) keep working: Retained = positive ΔΨ, Excluded = negative.
+map_groups <- function(groups) {
+  vapply(trimws(groups), function(g) {
+    switch(g,
+      Retained = "Positive",
+      Excluded = "Negative",
+      g
+    )
+  }, character(1), USE.NAMES = FALSE)
 }
 opt_txid <- function(x) {
   v <- opt_str(x)
@@ -36,22 +47,11 @@ log_error <- function(...) message(format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), " 
 
 WORKER_START_TIME <- as.numeric(Sys.time())
 
-log_info("Loading GTF annotations...")
-gtf <- tryCatch(
-  LoadGTF(species = "Human"),
-  error = function(e) {
-    log_error("Human GTF load failed: ", conditionMessage(e))
-    NULL
-  }
-)
-gtf_mouse <- tryCatch(
-  LoadGTF(species = "Mouse"),
-  error = function(e) {
-    log_error("Mouse GTF load failed: ", conditionMessage(e))
-    NULL
-  }
-)
-log_info("GTF ready. human=", !is.null(gtf), " mouse=", !is.null(gtf_mouse))
+# GTF annotations are resolved inside RNAPeaks from its bundled datasets
+# (gtf_hg38 / gtf_mm10 / gtf_mm39) via the `species` argument, or from a
+# user-supplied GTF file path. Nothing to preload here.
+GTF_AVAILABLE <- requireNamespace("RNAPeaks", quietly = TRUE)
+log_info("RNAPeaks loaded. bundled GTF available=", GTF_AVAILABLE)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -87,6 +87,208 @@ resolve_bed <- function(req, upload_id, bed_source, endpoint) {
     log_info(endpoint, ": using built-in K562_bed")
   }
   bed
+}
+
+# ── Multi-BED resolver ─────────────────────────────────────────────────────────
+# plot_gene / plot_region / plot_utr_binding accept a *named list* of BED data
+# frames. Builds that list from any combination of built-in tracks (K562 /
+# HepG2, comma-separated in `bed_sources`) and uploaded files (comma-separated
+# upload IDs in `bed_upload_ids`, with matching labels in `bed_labels`).
+# Falls back to the legacy single-bed params (`bed_source` / `upload_id`) and,
+# ultimately, to built-in K562.
+resolve_beds <- function(req, bed_sources, bed_upload_ids, bed_labels,
+                         upload_id, bed_source, endpoint) {
+  beds <- list()
+
+  # Built-in tracks: plural csv, else legacy singular.
+  srcs <- opt_str(bed_sources)
+  src_vec <- if (!is.null(srcs)) {
+    trimws(strsplit(srcs, ",")[[1]])
+  } else {
+    s <- opt_str(bed_source)
+    if (is.null(s)) character(0) else s
+  }
+  for (s in src_vec) {
+    if (identical(s, "HepG2")) {
+      beds[["HepG2"]] <- RNAPeaks::HepG2_bed
+    } else if (identical(s, "K562")) {
+      beds[["K562"]] <- RNAPeaks::K562_bed
+    }
+  }
+
+  # Uploaded tracks: plural csv, else legacy singular upload_id.
+  ids <- opt_str(bed_upload_ids)
+  id_vec <- if (!is.null(ids)) {
+    trimws(strsplit(ids, ",")[[1]])
+  } else {
+    u <- opt_str(upload_id)
+    if (is.null(u)) character(0) else u
+  }
+  labs <- opt_str(bed_labels)
+  lab_vec <- if (!is.null(labs)) trimws(strsplit(labs, ",")[[1]]) else character(0)
+
+  for (i in seq_along(id_vec)) {
+    if (!nzchar(id_vec[i])) next
+    path <- get_upload_path(req$session_id, id_vec[i])
+    nm <- if (i <= length(lab_vec) && nzchar(lab_vec[i])) lab_vec[i] else paste0("bed", i)
+    beds[[nm]] <- utils::read.table(path, header = FALSE, sep = "\t")
+  }
+
+  if (length(beds) == 0L) {
+    beds[["K562"]] <- RNAPeaks::K562_bed
+    log_info(endpoint, ": no BED supplied, using built-in K562_bed")
+  } else {
+    log_info(
+      endpoint, ": ", length(beds), " BED track(s): ",
+      paste(names(beds), collapse = ", ")
+    )
+  }
+  beds
+}
+
+# ── GTF resolver ───────────────────────────────────────────────────────────────
+# The RNAPeaks plot functions take `gtf` as an optional *file path*; when NULL
+# they fall back to the bundled annotation selected by `species`. So a custom
+# GTF upload just resolves to its on-disk path — no loading happens here.
+resolve_gtf_path <- function(req, gtf_upload_id, endpoint) {
+  gid <- opt_str(gtf_upload_id)
+  if (is.null(gid)) {
+    return(NULL)
+  }
+  path <- get_upload_path(req$session_id, gid)
+  log_info(endpoint, ": using custom GTF upload_id=", gid)
+  path
+}
+
+# ── Param mapping helpers (old webapp vocabulary → new RNAPeaks API) ────────────
+
+# The old UI sends "Target" (alphabetical) or "Count"; peaks_options() expects
+# "Alphabetical" or "Count".
+map_order_by <- function(x) {
+  v <- opt_str(x, "Count")
+  if (identical(v, "Target")) "Alphabetical" else v
+}
+
+# Two separate start/stop params collapse into peaks_plot_style(highlight=c(a,b)).
+resolve_highlight <- function(start, stop) {
+  s <- opt_str(start)
+  e <- opt_str(stop)
+  if (is.null(s) || is.null(e)) {
+    return(NULL)
+  }
+  c(as.integer(s), as.integer(e))
+}
+
+resolve_bam_ylim <- function(ymin, ymax) {
+  lo <- opt_str(ymin)
+  hi <- opt_str(ymax)
+  if (is.null(lo) || is.null(hi)) {
+    return(NULL)
+  }
+  c(as.numeric(lo), as.numeric(hi))
+}
+
+# Wraps prepare_bam_files and reduces its per-track fill colors to the single
+# color the new API supports (style$bam_fill_color applies to all tracks).
+# Returns NULL when no BAM tracks were supplied or preparation failed.
+resolve_bam <- function(req, bam_upload_ids, bam_bai_ids, bam_labels, bam_fill_cols) {
+  if (is.null(opt_str(bam_upload_ids)) || is.null(opt_str(bam_bai_ids))) {
+    return(NULL)
+  }
+  info <- tryCatch(
+    prepare_bam_files(
+      session_id    = req$session_id,
+      bam_ids_str   = opt_str(bam_upload_ids, ""),
+      bai_ids_str   = opt_str(bam_bai_ids, ""),
+      labels_str    = opt_str(bam_labels, ""),
+      fill_cols_str = opt_str(bam_fill_cols, "navy")
+    ),
+    error = function(e) {
+      log_error("BAM prep failed: ", conditionMessage(e))
+      NULL
+    }
+  )
+  if (is.null(info)) {
+    return(NULL)
+  }
+  info$fill_col <- info$fill_cols[1] # new API: one fill color for all tracks
+  info
+}
+
+# ── rMATS resolver ─────────────────────────────────────────────────────────────
+# Uploaded rMATS table, or the bundled sample matched to the event type:
+# SE -> se_mats_jc, RI -> ri_mats_jc.
+resolve_mats <- function(req, mats_upload_id, event_type, endpoint) {
+  mid <- opt_str(mats_upload_id)
+  if (!is.null(mid)) {
+    path <- get_upload_path(req$session_id, mid)
+    log_info(endpoint, ": using uploaded rMATS upload_id=", mid)
+    return(utils::read.table(path, header = TRUE, sep = "\t"))
+  }
+  if (identical(event_type, "RI")) {
+    log_info(endpoint, ": using built-in ri_mats_jc")
+    RNAPeaks::ri_mats_jc
+  } else {
+    log_info(endpoint, ": using built-in se_mats_jc")
+    RNAPeaks::se_mats_jc
+  }
+}
+
+# ── Splicing/sequence map param builders ───────────────────────────────────────
+# Shared by the SE / RI / sequence endpoints, which all expose the same flat
+# query params. Maps them onto splicing_options() / splicing_style().
+#
+# Old → new param remap:
+#   p_valueRetainedAndExclusion        -> event_fdr    (max rMATS FDR per event)
+#   p_valueControls                    -> control_pval (min rMATS PValue for control)
+#   retained/exclusion_IncLevelDifference -> psi_cutoff = c(neg, pos)
+#   Min_Count                          -> min_count
+#   retained/excluded/control_col      -> group_colors list(Positive/Negative/Control)
+build_splicing_options <- function(WidthIntoExon, WidthIntoIntron, moving_average,
+                                   p_valueRetainedAndExclusion, p_valueControls,
+                                   retained_IncLevelDifference, exclusion_IncLevelDifference,
+                                   Min_Count, groups, control_multiplier,
+                                   control_iterations, fdr_threshold) {
+  splicing_options(
+    width_exon = as.integer(WidthIntoExon),
+    width_intron = as.integer(WidthIntoIntron),
+    moving_average = as.integer(moving_average),
+    event_fdr = opt_num(p_valueRetainedAndExclusion, 0.05),
+    control_pval = opt_num(p_valueControls, 0.95),
+    psi_cutoff = c(
+      opt_num(exclusion_IncLevelDifference, -0.1),
+      opt_num(retained_IncLevelDifference, 0.1)
+    ),
+    min_count = opt_int(Min_Count, 50),
+    groups = map_groups(opt_groups(groups)),
+    control_multiplier = opt_num(control_multiplier, 2.0),
+    control_iterations = opt_int(control_iterations, 20),
+    use_fdr = TRUE,
+    fdr_threshold = opt_num(fdr_threshold, 0.05),
+    verbose = FALSE
+  )
+}
+
+# Split a comma-separated motif string into a clean character vector.
+parse_motifs <- function(sequence) {
+  motifs <- trimws(strsplit(sequence, ",")[[1]])
+  motifs[nchar(motifs) > 0]
+}
+
+build_splicing_style <- function(retained_col, excluded_col, control_col, exon_col,
+                                 line_width, axis_text_size, title_size) {
+  splicing_style(
+    group_colors = list(
+      Positive = opt_str(retained_col, "blue"),
+      Negative = opt_str(excluded_col, "red"),
+      Control  = opt_str(control_col, "black")
+    ),
+    line_width = opt_num(line_width, 0.8),
+    show_significance = TRUE,
+    title_size = opt_num(title_size, 20),
+    axis_text_size = opt_num(axis_text_size, 11),
+    exon_col = opt_str(exon_col, "navy")
+  )
 }
 
 # ── BAM helper ─────────────────────────────────────────────────────────────────
@@ -250,7 +452,7 @@ function(req, res) {
 
 #* @get /health
 function() {
-  list(status = "ok", gtf_loaded = !is.null(gtf))
+  list(status = "ok", gtf_loaded = GTF_AVAILABLE)
 }
 
 
@@ -274,7 +476,7 @@ function() {
   list(
     status           = "ok",
     worker_pid       = Sys.getpid(),
-    gtf_loaded       = !is.null(gtf),
+    gtf_loaded       = GTF_AVAILABLE,
     uptime_secs      = as.integer(now - WORKER_START_TIME),
     active_sessions  = active_sessions,
     total_sessions   = length(all_dirs),
@@ -343,10 +545,12 @@ function(req, upload_id) {
 
 #* @post /plot-gene
 #* @serializer png list(width = 1600, height = 1200, res = 150)
-function(req, upload_id = NULL, bed_source = NULL, geneID, species = "Human", peak_col = "purple",
-         order_by = "Target", five_to_three = "FALSE",
+function(req, upload_id = NULL, bed_source = NULL,
+         bed_sources = NULL, bed_upload_ids = NULL, bed_labels = NULL,
+         geneID, species = "hg38", peak_col = "purple",
+         order_by = "Count", five_to_three = "FALSE",
          TxID = NULL, merge = NULL, total_arrows = NULL, max_per_intron = NULL,
-         gtf_upload_id = NULL, max_proteins = 40,
+         gtf_upload_id = NULL, max_proteins = NULL,
          title_size = NULL, label_size = NULL, axis_breaks_n = NULL,
          show_junctions = NULL, junction_color = NULL,
          highlighted_region_start = NULL, highlighted_region_stop = NULL, highlighted_region_color = NULL,
@@ -357,90 +561,55 @@ function(req, upload_id = NULL, bed_source = NULL, geneID, species = "Human", pe
   log_info("plot-gene session=", req$session_id, " geneID=", geneID)
   tryCatch(
     {
-      plot_tmp_png <- tempfile(pattern = "rnapeaks_", fileext = ".png")
-      plot_tmp_bed <- tempfile(pattern = "rnapeaks_", fileext = ".bed")
-      on.exit(
-        {
-          unlink(plot_tmp_png)
-          unlink(plot_tmp_bed)
-        },
-        add = TRUE
+      bed <- resolve_beds(
+        req, bed_sources, bed_upload_ids, bed_labels,
+        upload_id, bed_source, "plot-gene"
       )
-
-      bed <- resolve_bed(req, upload_id, bed_source, "plot-gene")
-
-      # Resolve GTF: prefer uploaded custom GTF, fall back to preloaded by species
-      active_gtf <- tryCatch(
-        {
-          gid <- opt_str(gtf_upload_id)
-          if (!is.null(gid)) {
-            gtf_path <- get_upload_path(req$session_id, gid)
-            log_info("plot-gene: loading custom GTF from upload_id=", gid)
-            LoadGTF(file = gtf_path)
-          } else {
-            if (species == "Mouse") gtf_mouse else gtf
-          }
-        },
-        error = function(e) {
-          log_error("Custom GTF load failed, falling back to preloaded: ", conditionMessage(e))
-          if (species == "Mouse") gtf_mouse else gtf
-        }
-      )
+      gtf_path <- resolve_gtf_path(req, gtf_upload_id, "plot-gene")
 
       # Resolve BAM coverage tracks
-      bam_info <- NULL
-      if (!is.null(opt_str(bam_upload_ids)) && !is.null(opt_str(bam_bai_ids))) {
-        bam_info <- tryCatch(
-          prepare_bam_files(
-            session_id = req$session_id,
-            bam_ids_str = opt_str(bam_upload_ids, ""),
-            bai_ids_str = opt_str(bam_bai_ids, ""),
-            labels_str = opt_str(bam_labels, ""),
-            fill_cols_str = opt_str(bam_fill_cols, "steelblue")
-          ),
-          error = function(e) {
-            log_error("BAM prep failed: ", conditionMessage(e))
-            NULL
-          }
-        )
-        if (!is.null(bam_info)) {
-          on.exit(unlink(bam_info$tmp_dirs, recursive = TRUE), add = TRUE)
-        }
+      bam_info <- resolve_bam(req, bam_upload_ids, bam_bai_ids, bam_labels, bam_fill_cols)
+      if (!is.null(bam_info)) {
+        on.exit(unlink(bam_info$tmp_dirs, recursive = TRUE), add = TRUE)
       }
 
-      resolved_bam_ylim <- if (!is.null(opt_str(bam_ylim_min)) && !is.null(opt_str(bam_ylim_max))) {
-        c(as.numeric(bam_ylim_min), as.numeric(bam_ylim_max))
-      } else {
-        NULL
-      }
-
-      result <- PlotGene(
-        bed = bed, geneID = geneID, gtf = active_gtf, species = species,
-        TxID = opt_txid(TxID),
-        merge = opt_int(merge, 0),
-        peak_col = peak_col, order_by = order_by,
-        five_to_three = as.logical(five_to_three),
-        total_arrows = opt_int(total_arrows, 6),
-        max_per_intron = opt_int(max_per_intron, 2),
-        max_proteins = opt_int(max_proteins, 40),
-        title_size = opt_num(title_size, 25),
-        label_size = opt_num(label_size, 5),
-        axis_breaks_n = opt_int(axis_breaks_n, 5),
-        show_junctions = isTRUE(as.logical(opt_str(show_junctions, "FALSE"))),
-        junction_color = opt_str(junction_color, "gray40"),
-        highlighted_region_start = opt_int(highlighted_region_start, NULL),
-        highlighted_region_stop = opt_int(highlighted_region_stop, NULL),
-        highlighted_region_color = opt_str(highlighted_region_color, NULL),
-        bam_files = if (!is.null(bam_info)) bam_info$paths else NULL,
-        bam_fill_col = if (!is.null(bam_info)) bam_info$fill_cols else "steelblue",
-        bam_fill_alpha = opt_num(bam_fill_alpha, 0.75),
-        bam_ylim = resolved_bam_ylim,
-        bam_track_height = opt_num(bam_track_height, 1),
-        bam_label_size = opt_num(bam_label_size, 9),
-        bam_axis_text_size = opt_num(bam_axis_text_size, 8),
-        RNA_Peaks_File_Path = plot_tmp_png, Bed_File_Path = plot_tmp_bed
+      opts <- peaks_options(
+        order_by     = map_order_by(order_by),
+        collapse     = opt_num(merge, 0),
+        max_proteins = opt_int(max_proteins, 100)
       )
-      print(result$plot)
+
+      style <- peaks_plot_style(
+        peak_color         = peak_col,
+        total_arrows       = opt_int(total_arrows, 6),
+        max_per_intron     = opt_int(max_per_intron, 2),
+        title_size         = opt_num(title_size, 25),
+        protein_label_size = opt_num(label_size, 4),
+        axis_breaks_n      = opt_int(axis_breaks_n, 5),
+        five_to_three      = isTRUE(as.logical(five_to_three)),
+        show_junctions     = isTRUE(as.logical(opt_str(show_junctions, "FALSE"))),
+        junction_color     = opt_str(junction_color, "gray40"),
+        highlight          = resolve_highlight(highlighted_region_start, highlighted_region_stop),
+        highlight_color    = opt_str(highlighted_region_color, "pink"),
+        bam_fill_color     = if (!is.null(bam_info)) bam_info$fill_col else "navy",
+        bam_fill_alpha     = opt_num(bam_fill_alpha, 0.75),
+        bam_ylim           = resolve_bam_ylim(bam_ylim_min, bam_ylim_max),
+        bam_track_height   = opt_num(bam_track_height, 0.7),
+        bam_label_size     = opt_num(bam_label_size, 4),
+        bam_axis_text_size = opt_num(bam_axis_text_size, 2.8)
+      )
+
+      plot <- plot_gene(
+        bed        = bed,
+        gene       = geneID,
+        transcript = opt_txid(TxID),
+        gtf        = gtf_path,
+        species    = species,
+        bam_files  = if (!is.null(bam_info)) bam_info$paths else NULL,
+        peaks_opts = opts,
+        style      = style
+      )
+      print(plot)
     },
     error = function(e) {
       msg <- conditionMessage(e)
@@ -455,11 +624,13 @@ function(req, upload_id = NULL, bed_source = NULL, geneID, species = "Human", pe
 
 #* @post /plot-region
 #* @serializer png list(width = 1600, height = 1200, res = 150)
-function(req, upload_id = NULL, bed_source = NULL, Chr, Start, End, Strand, species = "Human",
-         peak_col = "purple", order_by = "Target",
+function(req, upload_id = NULL, bed_source = NULL,
+         bed_sources = NULL, bed_upload_ids = NULL, bed_labels = NULL,
+         Chr, Start, End, Strand, species = "hg38",
+         peak_col = "purple", order_by = "Count",
          geneID = NULL, TxID = NULL, merge = NULL, total_arrows = NULL, max_per_intron = NULL,
          exon_col = NULL, utr_col = NULL, gtf_upload_id = NULL,
-         max_proteins = 40, title_size = NULL, label_size = NULL, axis_breaks_n = NULL,
+         max_proteins = NULL, title_size = NULL, label_size = NULL, axis_breaks_n = NULL,
          five_to_three = "FALSE", show_junctions = NULL, junction_color = NULL,
          highlighted_region_start = NULL, highlighted_region_stop = NULL, highlighted_region_color = NULL,
          bam_upload_ids = NULL, bam_bai_ids = NULL, bam_labels = NULL, bam_fill_cols = NULL,
@@ -468,95 +639,58 @@ function(req, upload_id = NULL, bed_source = NULL, Chr, Start, End, Strand, spec
   log_info("plot-region session=", req$session_id, " region=", Chr, ":", Start, "-", End)
   tryCatch(
     {
-      plot_tmp_png <- tempfile(pattern = "rnapeaks_", fileext = ".png")
-      plot_tmp_bed <- tempfile(pattern = "rnapeaks_", fileext = ".bed")
-      on.exit(
-        {
-          unlink(plot_tmp_png)
-          unlink(plot_tmp_bed)
-        },
-        add = TRUE
+      bed <- resolve_beds(
+        req, bed_sources, bed_upload_ids, bed_labels,
+        upload_id, bed_source, "plot-region"
       )
+      gtf_path <- resolve_gtf_path(req, gtf_upload_id, "plot-region")
 
-      bed <- resolve_bed(req, upload_id, bed_source, "plot-region")
-
-      # Resolve GTF: prefer uploaded custom GTF, fall back to preloaded by species
-      active_gtf <- tryCatch(
-        {
-          gid <- opt_str(gtf_upload_id)
-          if (!is.null(gid)) {
-            gtf_path <- get_upload_path(req$session_id, gid)
-            log_info("plot-region: loading custom GTF from upload_id=", gid)
-            LoadGTF(file = gtf_path)
-          } else {
-            if (species == "Mouse") gtf_mouse else gtf
-          }
-        },
-        error = function(e) {
-          log_error("Custom GTF load failed, falling back to preloaded: ", conditionMessage(e))
-          if (species == "Mouse") gtf_mouse else gtf
-        }
-      )
-
-      # Resolve BAM coverage tracks
-      bam_info <- NULL
-      if (!is.null(opt_str(bam_upload_ids)) && !is.null(opt_str(bam_bai_ids))) {
-        bam_info <- tryCatch(
-          prepare_bam_files(
-            session_id    = req$session_id,
-            bam_ids_str   = opt_str(bam_upload_ids, ""),
-            bai_ids_str   = opt_str(bam_bai_ids, ""),
-            labels_str    = opt_str(bam_labels, ""),
-            fill_cols_str = opt_str(bam_fill_cols, "steelblue")
-          ),
-          error = function(e) {
-            log_error("BAM prep failed: ", conditionMessage(e))
-            NULL
-          }
-        )
-        if (!is.null(bam_info)) {
-          on.exit(unlink(bam_info$tmp_dirs, recursive = TRUE), add = TRUE)
-        }
+      bam_info <- resolve_bam(req, bam_upload_ids, bam_bai_ids, bam_labels, bam_fill_cols)
+      if (!is.null(bam_info)) {
+        on.exit(unlink(bam_info$tmp_dirs, recursive = TRUE), add = TRUE)
       }
 
-      resolved_bam_ylim <- if (!is.null(opt_str(bam_ylim_min)) && !is.null(opt_str(bam_ylim_max))) {
-        c(as.numeric(bam_ylim_min), as.numeric(bam_ylim_max))
-      } else {
-        NULL
-      }
-
-      result <- PlotRegion(
-        bed = bed, gtf = active_gtf, Chr = Chr,
-        Start = as.integer(Start), End = as.integer(End),
-        Strand = Strand,
-        geneID = if (!is.null(opt_str(geneID, NULL))) toupper(opt_str(geneID, NULL)) else NULL,
-        TxID = opt_txid(TxID),
-        merge = opt_int(merge, 0),
-        peak_col = peak_col, order_by = order_by,
-        total_arrows = opt_int(total_arrows, 12),
-        max_per_intron = opt_int(max_per_intron, 5),
-        exon_col = opt_str(exon_col, "black"),
-        utr_col = opt_str(utr_col, "dark gray"),
-        max_proteins = opt_int(max_proteins, 40),
-        title_size = opt_num(title_size, 25),
-        label_size = opt_num(label_size, 5),
-        axis_breaks_n = opt_int(axis_breaks_n, 5),
-        five_to_three = as.logical(five_to_three),
-        show_junctions = isTRUE(as.logical(opt_str(show_junctions, "FALSE"))),
-        junction_color = opt_str(junction_color, "gray40"),
-        highlighted_region_start = opt_int(highlighted_region_start, NULL),
-        highlighted_region_stop = opt_int(highlighted_region_stop, NULL),
-        highlighted_region_color = opt_str(highlighted_region_color, NULL),
-        bam_files = if (!is.null(bam_info)) bam_info$paths else NULL,
-        bam_fill_col = if (!is.null(bam_info)) bam_info$fill_cols else "steelblue",
-        bam_fill_alpha = opt_num(bam_fill_alpha, 0.75),
-        bam_ylim = resolved_bam_ylim,
-        bam_track_height = opt_num(bam_track_height, 1),
-        bam_label_size = opt_num(bam_label_size, 9),
-        bam_axis_text_size = opt_num(bam_axis_text_size, 8),
-        RNA_Peaks_File_Path = plot_tmp_png, Bed_File_Path = plot_tmp_bed
+      opts <- peaks_options(
+        order_by     = map_order_by(order_by),
+        collapse     = opt_num(merge, 0),
+        max_proteins = opt_int(max_proteins, 100)
       )
-      print(result$plot)
+
+      style <- peaks_plot_style(
+        peak_color         = peak_col,
+        exon_color         = opt_str(exon_col, "navy"),
+        utr_color          = opt_str(utr_col, "lightgray"),
+        total_arrows       = opt_int(total_arrows, 12),
+        max_per_intron     = opt_int(max_per_intron, 5),
+        title_size         = opt_num(title_size, 25),
+        protein_label_size = opt_num(label_size, 4),
+        axis_breaks_n      = opt_int(axis_breaks_n, 5),
+        five_to_three      = isTRUE(as.logical(five_to_three)),
+        show_junctions     = isTRUE(as.logical(opt_str(show_junctions, "FALSE"))),
+        junction_color     = opt_str(junction_color, "gray40"),
+        highlight          = resolve_highlight(highlighted_region_start, highlighted_region_stop),
+        highlight_color    = opt_str(highlighted_region_color, "pink"),
+        bam_fill_color     = if (!is.null(bam_info)) bam_info$fill_col else "navy",
+        bam_fill_alpha     = opt_num(bam_fill_alpha, 0.75),
+        bam_ylim           = resolve_bam_ylim(bam_ylim_min, bam_ylim_max),
+        bam_track_height   = opt_num(bam_track_height, 0.7),
+        bam_label_size     = opt_num(bam_label_size, 4),
+        bam_axis_text_size = opt_num(bam_axis_text_size, 2.8)
+      )
+
+      plot <- plot_region(
+        bed        = bed,
+        chr        = Chr,
+        start      = as.integer(Start),
+        end        = as.integer(End),
+        strand     = Strand,
+        gtf        = gtf_path,
+        species    = species,
+        bam_files  = if (!is.null(bam_info)) bam_info$paths else NULL,
+        peaks_opts = opts,
+        style      = style
+      )
+      print(plot)
     },
     error = function(e) {
       msg <- conditionMessage(e)
@@ -583,39 +717,21 @@ function(req, bed_upload_id = NULL, bed_source = NULL, mats_upload_id = NULL,
   tryCatch(
     {
       bed <- resolve_bed(req, bed_upload_id, bed_source, "splicing-map")
-      mid <- opt_str(mats_upload_id)
-      if (!is.null(mid)) {
-        mats_path <- get_upload_path(req$session_id, mid)
-        mats <- utils::read.table(mats_path, header = TRUE, sep = "\t")
-        log_info("splicing-map: using uploaded SE.MATS upload_id=", mid)
-      } else {
-        mats <- RNAPeaks::`sample_se.mats`
-        log_info("splicing-map: using built-in sample_se.mats")
-      }
-      plot <- createSplicingMap(
-        bed_file = bed, SEMATS = mats,
-        WidthIntoExon = as.integer(WidthIntoExon),
-        WidthIntoIntron = as.integer(WidthIntoIntron),
-        moving_average = as.integer(moving_average),
-        p_valueRetainedAndExclusion = opt_num(p_valueRetainedAndExclusion, 0.05),
-        p_valueControls = opt_num(p_valueControls, 0.95),
-        retained_IncLevelDifference = opt_num(retained_IncLevelDifference, 0.1),
-        exclusion_IncLevelDifference = opt_num(exclusion_IncLevelDifference, -0.1),
-        Min_Count = opt_int(Min_Count, 50),
-        groups = opt_groups(groups),
-        control_multiplier = opt_num(control_multiplier, 2.0),
-        control_iterations = opt_int(control_iterations, 20),
-        use_fdr = TRUE, one_sided = TRUE, show_significance = TRUE, min_consecutive = 10L,
-        fdr_threshold = opt_num(fdr_threshold, 0.05),
-        title = opt_str(title, ""),
-        retained_col = opt_str(retained_col, "blue"),
-        excluded_col = opt_str(excluded_col, "red"),
-        control_col = opt_str(control_col, "black"),
-        exon_col = opt_str(exon_col, "navy"),
-        line_width = opt_num(line_width, 0.8),
-        axis_text_size = opt_num(axis_text_size, 11),
-        title_size = opt_num(title_size, 20),
-        verbose = FALSE
+      mats <- resolve_mats(req, mats_upload_id, "SE", "splicing-map")
+      plot <- skipped_exon_splicing_map(
+        events = mats,
+        bed_file = bed,
+        opts = build_splicing_options(
+          WidthIntoExon, WidthIntoIntron, moving_average,
+          p_valueRetainedAndExclusion, p_valueControls,
+          retained_IncLevelDifference, exclusion_IncLevelDifference,
+          Min_Count, groups, control_multiplier, control_iterations, fdr_threshold
+        ),
+        style = build_splicing_style(
+          retained_col, excluded_col, control_col, exon_col,
+          line_width, axis_text_size, title_size
+        ),
+        title = opt_str(title, "")
       )
       print(plot)
     },
@@ -632,7 +748,7 @@ function(req, bed_upload_id = NULL, bed_source = NULL, mats_upload_id = NULL,
 
 #* @post /sequence-map
 #* @serializer png list(width = 1400, height = 900, res = 150)
-function(req, mats_upload_id = NULL, sequence,
+function(req, mats_upload_id = NULL, sequence, genome = "hg38",
          motif_mode = "combined",
          WidthIntoExon = "50", WidthIntoIntron = "250", moving_average = "40",
          p_valueRetainedAndExclusion = NULL, p_valueControls = NULL,
@@ -644,42 +760,24 @@ function(req, mats_upload_id = NULL, sequence,
   log_info("sequence-map session=", req$session_id, " sequence=", sequence, " motif_mode=", motif_mode)
   tryCatch(
     {
-      mid <- opt_str(mats_upload_id)
-      if (!is.null(mid)) {
-        path <- get_upload_path(req$session_id, mid)
-        mats <- utils::read.table(path, header = TRUE, sep = "\t")
-        log_info("sequence-map: using uploaded SE.MATS upload_id=", mid)
-      } else {
-        mats <- RNAPeaks::`sample_se.mats`
-        log_info("sequence-map: using built-in sample_se.mats")
-      }
-      # Parse comma-separated motifs into a character vector
-      motifs <- trimws(strsplit(sequence, ",")[[1]])
-      motifs <- motifs[nchar(motifs) > 0]
-      plot <- createSequenceMap(
-        SEMATS = mats, sequence = motifs, motif_mode = motif_mode,
-        WidthIntoExon = as.integer(WidthIntoExon),
-        WidthIntoIntron = as.integer(WidthIntoIntron),
-        moving_average = as.integer(moving_average),
-        p_valueRetainedAndExclusion = opt_num(p_valueRetainedAndExclusion, 0.05),
-        p_valueControls = opt_num(p_valueControls, 0.95),
-        retained_IncLevelDifference = opt_num(retained_IncLevelDifference, 0.1),
-        exclusion_IncLevelDifference = opt_num(exclusion_IncLevelDifference, -0.1),
-        Min_Count = opt_int(Min_Count, 50),
-        groups = opt_groups(groups),
-        control_multiplier = opt_num(control_multiplier, 2.0),
-        control_iterations = opt_int(control_iterations, 20),
-        use_fdr = TRUE, one_sided = TRUE, show_significance = TRUE, min_consecutive = 10L,
-        fdr_threshold = opt_num(fdr_threshold, 0.05),
-        title = opt_str(title, ""),
-        retained_col = opt_str(retained_col, "blue"),
-        excluded_col = opt_str(excluded_col, "red"),
-        control_col = opt_str(control_col, "black"),
-        exon_col = opt_str(exon_col, "navy"),
-        line_width = opt_num(line_width, 0.8),
-        axis_text_size = opt_num(axis_text_size, 11),
-        title_size = opt_num(title_size, 20),
-        verbose = FALSE
+      mats <- resolve_mats(req, mats_upload_id, "SE", "sequence-map")
+      motifs <- parse_motifs(sequence)
+      plot <- skipped_exon_sequence_map(
+        events = mats,
+        sequence = motifs,
+        genome = opt_str(genome, "hg38"),
+        motif_mode = motif_mode,
+        opts = build_splicing_options(
+          WidthIntoExon, WidthIntoIntron, moving_average,
+          p_valueRetainedAndExclusion, p_valueControls,
+          retained_IncLevelDifference, exclusion_IncLevelDifference,
+          Min_Count, groups, control_multiplier, control_iterations, fdr_threshold
+        ),
+        style = build_splicing_style(
+          retained_col, excluded_col, control_col, exon_col,
+          line_width, axis_text_size, title_size
+        ),
+        title = opt_str(title, "")
       )
       print(plot)
     },
@@ -708,39 +806,21 @@ function(req, bed_upload_id = NULL, bed_source = NULL, mats_upload_id = NULL,
   tryCatch(
     {
       bed <- resolve_bed(req, bed_upload_id, bed_source, "ri-splicing-map")
-      mid <- opt_str(mats_upload_id)
-      if (!is.null(mid)) {
-        mats_path <- get_upload_path(req$session_id, mid)
-        mats <- utils::read.table(mats_path, header = TRUE, sep = "\t")
-        log_info("ri-splicing-map: using uploaded RI.MATS upload_id=", mid)
-      } else {
-        mats <- RNAPeaks::`sample_se.mats`
-        log_info("ri-splicing-map: using built-in sample_se.mats")
-      }
-      plot <- createRetainedIntronSplicingMap(
-        bed_file = bed, RIMATS = mats,
-        WidthIntoExon = as.integer(WidthIntoExon),
-        WidthIntoIntron = as.integer(WidthIntoIntron),
-        moving_average = as.integer(moving_average),
-        p_valueRetainedAndExclusion = opt_num(p_valueRetainedAndExclusion, 0.05),
-        p_valueControls = opt_num(p_valueControls, 0.95),
-        retained_IncLevelDifference = opt_num(retained_IncLevelDifference, 0.1),
-        exclusion_IncLevelDifference = opt_num(exclusion_IncLevelDifference, -0.1),
-        Min_Count = opt_int(Min_Count, 50),
-        groups = opt_groups(groups),
-        control_multiplier = opt_num(control_multiplier, 2.0),
-        control_iterations = opt_int(control_iterations, 20),
-        use_fdr = TRUE, one_sided = TRUE, show_significance = TRUE, min_consecutive = 10L,
-        fdr_threshold = opt_num(fdr_threshold, 0.05),
-        title = opt_str(title, ""),
-        retained_col = opt_str(retained_col, "blue"),
-        excluded_col = opt_str(excluded_col, "red"),
-        control_col = opt_str(control_col, "black"),
-        exon_col = opt_str(exon_col, "navy"),
-        line_width = opt_num(line_width, 0.8),
-        axis_text_size = opt_num(axis_text_size, 11),
-        title_size = opt_num(title_size, 20),
-        verbose = FALSE
+      mats <- resolve_mats(req, mats_upload_id, "RI", "ri-splicing-map")
+      plot <- retained_intron_splicing_map(
+        events = mats,
+        bed_file = bed,
+        opts = build_splicing_options(
+          WidthIntoExon, WidthIntoIntron, moving_average,
+          p_valueRetainedAndExclusion, p_valueControls,
+          retained_IncLevelDifference, exclusion_IncLevelDifference,
+          Min_Count, groups, control_multiplier, control_iterations, fdr_threshold
+        ),
+        style = build_splicing_style(
+          retained_col, excluded_col, control_col, exon_col,
+          line_width, axis_text_size, title_size
+        ),
+        title = opt_str(title, "")
       )
       print(plot)
     },
@@ -757,7 +837,7 @@ function(req, bed_upload_id = NULL, bed_source = NULL, mats_upload_id = NULL,
 
 #* @post /ri-sequence-map
 #* @serializer png list(width = 1400, height = 900, res = 150)
-function(req, mats_upload_id = NULL, sequence,
+function(req, mats_upload_id = NULL, sequence, genome = "hg38",
          motif_mode = "combined",
          WidthIntoExon = "50", WidthIntoIntron = "250", moving_average = "40",
          p_valueRetainedAndExclusion = NULL, p_valueControls = NULL,
@@ -769,42 +849,24 @@ function(req, mats_upload_id = NULL, sequence,
   log_info("ri-sequence-map session=", req$session_id, " sequence=", sequence, " motif_mode=", motif_mode)
   tryCatch(
     {
-      mid <- opt_str(mats_upload_id)
-      if (!is.null(mid)) {
-        path <- get_upload_path(req$session_id, mid)
-        mats <- utils::read.table(path, header = TRUE, sep = "\t")
-        log_info("ri-sequence-map: using uploaded RI.MATS upload_id=", mid)
-      } else {
-        mats <- RNAPeaks::`sample_se.mats`
-        log_info("ri-sequence-map: using built-in sample_se.mats")
-      }
-      # Parse comma-separated motifs into a character vector
-      motifs <- trimws(strsplit(sequence, ",")[[1]])
-      motifs <- motifs[nchar(motifs) > 0]
-      plot <- createRetainedIntronSequenceMap(
-        RIMATS = mats, sequence = motifs,
-        WidthIntoExon = as.integer(WidthIntoExon),
-        WidthIntoIntron = as.integer(WidthIntoIntron),
-        moving_average = as.integer(moving_average),
-        p_valueRetainedAndExclusion = opt_num(p_valueRetainedAndExclusion, 0.05),
-        p_valueControls = opt_num(p_valueControls, 0.95),
-        retained_IncLevelDifference = opt_num(retained_IncLevelDifference, 0.1),
-        exclusion_IncLevelDifference = opt_num(exclusion_IncLevelDifference, -0.1),
-        Min_Count = opt_int(Min_Count, 50),
-        groups = opt_groups(groups),
-        control_multiplier = opt_num(control_multiplier, 2.0),
-        control_iterations = opt_int(control_iterations, 20),
-        use_fdr = TRUE, one_sided = TRUE, show_significance = TRUE, min_consecutive = 10L,
-        fdr_threshold = opt_num(fdr_threshold, 0.05),
-        title = opt_str(title, ""),
-        retained_col = opt_str(retained_col, "blue"),
-        excluded_col = opt_str(excluded_col, "red"),
-        control_col = opt_str(control_col, "black"),
-        exon_col = opt_str(exon_col, "navy"),
-        line_width = opt_num(line_width, 0.8),
-        axis_text_size = opt_num(axis_text_size, 11),
-        title_size = opt_num(title_size, 20),
-        verbose = FALSE
+      mats <- resolve_mats(req, mats_upload_id, "RI", "ri-sequence-map")
+      motifs <- parse_motifs(sequence)
+      plot <- retained_intron_sequence_map(
+        events = mats,
+        sequence = motifs,
+        genome = opt_str(genome, "hg38"),
+        motif_mode = motif_mode,
+        opts = build_splicing_options(
+          WidthIntoExon, WidthIntoIntron, moving_average,
+          p_valueRetainedAndExclusion, p_valueControls,
+          retained_IncLevelDifference, exclusion_IncLevelDifference,
+          Min_Count, groups, control_multiplier, control_iterations, fdr_threshold
+        ),
+        style = build_splicing_style(
+          retained_col, excluded_col, control_col, exon_col,
+          line_width, axis_text_size, title_size
+        ),
+        title = opt_str(title, "")
       )
       print(plot)
     },
@@ -813,6 +875,91 @@ function(req, mats_upload_id = NULL, sequence,
       log_error("ri-sequence-map: ", msg)
       stop(msg)
     }
+  )
+}
+
+
+# ── UTR Binding ────────────────────────────────────────────────────────────────
+
+#* @post /utr-binding
+#* @serializer png list(width = 1400, height = 900, res = 150)
+function(req, upload_id = NULL, bed_source = NULL,
+         bed_sources = NULL, bed_upload_ids = NULL, bed_labels = NULL,
+         gtf_upload_id = NULL,
+         species = "hg38", transcripts = NULL, moving_average = NULL, title = NULL,
+         line_width = NULL, axis_text_size = NULL, title_size = NULL,
+         utr_fill = NULL, cds_fill = NULL, single_track_color = NULL) {
+  log_info("utr-binding session=", req$session_id, " species=", species)
+  tryCatch(
+    {
+      bed <- resolve_beds(
+        req, bed_sources, bed_upload_ids, bed_labels,
+        upload_id, bed_source, "utr-binding"
+      )
+      gtf_path <- resolve_gtf_path(req, gtf_upload_id, "utr-binding")
+
+      tx <- opt_str(transcripts)
+      tx_vec <- if (is.null(tx)) {
+        NULL
+      } else {
+        v <- trimws(strsplit(tx, ",")[[1]])
+        v[nchar(v) > 0]
+      }
+
+      style <- utr_style(
+        line_width         = opt_num(line_width, 0.8),
+        axis_text_size     = opt_num(axis_text_size, 11),
+        title_size         = opt_num(title_size, 20),
+        utr_fill           = opt_str(utr_fill, "lightgray"),
+        cds_fill           = opt_str(cds_fill, "navy"),
+        single_track_color = opt_str(single_track_color, "blue")
+      )
+
+      plot <- plot_utr_binding(
+        bed            = bed,
+        gtf            = gtf_path,
+        transcripts    = tx_vec,
+        species        = species,
+        moving_average = opt_int(moving_average, 5),
+        style          = style,
+        title          = opt_str(title, "")
+      )
+      print(plot)
+    },
+    error = function(e) {
+      msg <- conditionMessage(e)
+      log_error("utr-binding: ", msg)
+      stop(msg)
+    }
+  )
+}
+
+
+# ── Control Peaks ──────────────────────────────────────────────────────────────
+# Returns tabular data (not a plot): strand- and region-matched control peaks
+# for each input peak. anno / gene / transcripts come from the bundled
+# GENCODE v46 datasets.
+
+#* @post /control-peaks
+#* @serializer json
+function(req, upload_id = NULL, bed_source = NULL, threads = 23, seed = NULL) {
+  log_info("control-peaks session=", req$session_id)
+  raw_peaks <- resolve_bed(req, upload_id, bed_source, "control-peaks")
+
+  result <- generate_control_peaks(
+    raw_peaks   = raw_peaks,
+    anno        = RNAPeaks::gencode_v46_anno,
+    gene        = RNAPeaks::gencode_v46_genes,
+    transcripts = RNAPeaks::gencode_v46_transcripts,
+    threads     = opt_int(threads, 1),
+    seed        = opt_int(seed, 1234)
+  )
+
+  log_info("control-peaks: generated ", nrow(result), " control peaks")
+  list(
+    total   = nrow(result),
+    columns = colnames(result),
+    rows    = result
   )
 }
 
