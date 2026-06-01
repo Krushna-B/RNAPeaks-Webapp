@@ -42,11 +42,43 @@ async function fetchPlot(
   return URL.createObjectURL(blob)
 }
 
+async function fetchJson<T>(
+  endpoint: string,
+  params: Record<string, string>
+): Promise<T> {
+  const sessionToken = await getSessionToken()
+
+  const cleaned = Object.fromEntries(
+    Object.entries(params).filter(([, v]) => v !== "")
+  )
+  const qs = new URLSearchParams(cleaned).toString()
+
+  const res = await fetch(`/api/${endpoint}?${qs}`, {
+    method: "POST",
+    headers: { "X-Session-Token": sessionToken },
+  })
+
+  if (!res.ok) {
+    let serverMessage: string | undefined
+    try {
+      const body = await res.json()
+      const raw = body.error
+      serverMessage = Array.isArray(raw) ? raw[0] : raw
+    } catch {
+      /* ignore */
+    }
+    throw new Error(friendlyError(res.status, serverMessage))
+  }
+
+  return res.json() as Promise<T>
+}
+
 // ── PlotGene ───────────────────────────────────────────────────────────────────
 
 export interface PlotGeneParams {
-  uploadId: string
-  bedSource?: string
+  bedSources: string // comma-separated built-in tracks (K562,HepG2)
+  bedUploadIds: string // comma-separated uploaded BED ids
+  bedLabels: string // comma-separated labels for uploaded BEDs
   gtfUploadId?: string
   geneID: string
   species: string
@@ -81,8 +113,9 @@ export interface PlotGeneParams {
 
 export async function runPlotGene(params: PlotGeneParams): Promise<string> {
   return fetchPlot("plot-gene", {
-    upload_id: params.uploadId,
-    bed_source: params.bedSource ?? "",
+    bed_sources: params.bedSources,
+    bed_upload_ids: params.bedUploadIds,
+    bed_labels: params.bedLabels,
     gtf_upload_id: params.gtfUploadId ?? "",
     geneID: params.geneID,
     species: params.species,
@@ -118,8 +151,9 @@ export async function runPlotGene(params: PlotGeneParams): Promise<string> {
 // ── PlotRegion ─────────────────────────────────────────────────────────────────
 
 export interface PlotRegionParams {
-  uploadId: string
-  bedSource?: string
+  bedSources: string
+  bedUploadIds: string
+  bedLabels: string
   gtfUploadId?: string
   species?: string
   chr: string
@@ -161,8 +195,9 @@ export interface PlotRegionParams {
 
 export async function runPlotRegion(params: PlotRegionParams): Promise<string> {
   return fetchPlot("plot-region", {
-    upload_id: params.uploadId,
-    bed_source: params.bedSource ?? "",
+    bed_sources: params.bedSources,
+    bed_upload_ids: params.bedUploadIds,
+    bed_labels: params.bedLabels,
     gtf_upload_id: params.gtfUploadId ?? "",
     species: params.species ?? "",
     Chr: params.chr,
@@ -324,5 +359,69 @@ export async function runRISequenceMap(
     WidthIntoIntron: params.widthIntoIntron,
     moving_average: params.movingAverage,
     ...mapAdvancedToRecord(params),
+  })
+}
+
+// ── UTR Binding ────────────────────────────────────────────────────────────────
+
+export interface UtrBindingParams {
+  bedSources: string
+  bedUploadIds: string
+  bedLabels: string
+  gtfUploadId?: string
+  species: string
+  transcripts?: string // comma-separated transcript IDs
+  movingAverage?: string
+  title?: string
+  lineWidth?: string
+  axisTextSize?: string
+  titleSize?: string
+  utrFill?: string
+  cdsFill?: string
+  singleTrackColor?: string
+}
+
+export async function runUtrBinding(params: UtrBindingParams): Promise<string> {
+  return fetchPlot("utr-binding", {
+    bed_sources: params.bedSources,
+    bed_upload_ids: params.bedUploadIds,
+    bed_labels: params.bedLabels,
+    gtf_upload_id: params.gtfUploadId ?? "",
+    species: params.species,
+    transcripts: params.transcripts ?? "",
+    moving_average: params.movingAverage ?? "",
+    title: params.title ?? "",
+    line_width: params.lineWidth ?? "",
+    axis_text_size: params.axisTextSize ?? "",
+    title_size: params.titleSize ?? "",
+    utr_fill: params.utrFill ?? "",
+    cds_fill: params.cdsFill ?? "",
+    single_track_color: params.singleTrackColor ?? "",
+  })
+}
+
+// ── Control Peaks ──────────────────────────────────────────────────────────────
+
+export interface ControlPeaksParams {
+  uploadId: string
+  bedSource?: string
+  threads?: string
+  seed?: string
+}
+
+export interface ControlPeaksResult {
+  total: number
+  columns: string[]
+  rows: Record<string, string | number>[]
+}
+
+export async function runControlPeaks(
+  params: ControlPeaksParams
+): Promise<ControlPeaksResult> {
+  return fetchJson<ControlPeaksResult>("control-peaks", {
+    upload_id: params.uploadId,
+    bed_source: params.bedSource ?? "",
+    threads: params.threads ?? "",
+    seed: params.seed ?? "",
   })
 }

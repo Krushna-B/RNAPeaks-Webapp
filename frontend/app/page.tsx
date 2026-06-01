@@ -7,6 +7,8 @@ import { SplicingMapTab } from "@/components/tabs/SplicingMapTab"
 import { SequenceMapTab } from "@/components/tabs/SequenceMapTab"
 import { RISplicingMapTab } from "@/components/tabs/RISplicingMapTab"
 import { RISequenceMapTab } from "@/components/tabs/RISequenceMapTab"
+import { UtrBindingTab } from "@/components/tabs/UtrBindingTab"
+import { ControlPeaksTab } from "@/components/tabs/ControlPeaksTab"
 import { ThemeToggle } from "@/components/theme-provider"
 import { BookOpen } from "lucide-react"
 
@@ -33,6 +35,8 @@ export default function Home() {
             <TabsTrigger value="sequence-map">Sequence Map</TabsTrigger>
             <TabsTrigger value="ri-splicing-map">RI Splicing Map</TabsTrigger>
             <TabsTrigger value="ri-sequence-map">RI Sequence Map</TabsTrigger>
+            <TabsTrigger value="utr-binding">UTR Binding</TabsTrigger>
+            <TabsTrigger value="control-peaks">Control Peaks</TabsTrigger>
           </TabsList>
 
           {/* Right: docs + theme toggle */}
@@ -86,6 +90,18 @@ export default function Home() {
         className="mt-0 min-h-0 flex-1 overflow-hidden"
       >
         <RISequenceMapTab />
+      </TabsContent>
+      <TabsContent
+        value="utr-binding"
+        className="mt-0 min-h-0 flex-1 overflow-hidden"
+      >
+        <UtrBindingTab />
+      </TabsContent>
+      <TabsContent
+        value="control-peaks"
+        className="mt-0 min-h-0 flex-1 overflow-hidden"
+      >
+        <ControlPeaksTab />
       </TabsContent>
     </Tabs>
   )

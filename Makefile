@@ -33,4 +33,41 @@ update-pkg:
 logs:
 	docker compose logs -f backend
 
-.PHONY: build rebuild up down restart install-pkg update-pkg logs
+# ── Load testing ───────────────────────────────────────────────────────────────
+# Install k6 (one-time): brew install k6
+#
+# Smoke test — 2 users, 1 minute, confirms the server is alive
+# Usage: make smoke-test FRONTEND_URL=https://rna-peaks-webapp.vercel.app VERCEL_BYPASS_SECRET=your-secret
+# Get the bypass secret from: Vercel Dashboard → Project → Settings → Security → Protection Bypass for Automation
+smoke-test:
+	k6 run --vus 2 --duration 1m \
+	  -e FRONTEND_URL=$(FRONTEND_URL) \
+	  -e VERCEL_BYPASS_SECRET=$(VERCEL_BYPASS_SECRET) \
+	  load-test/stress-test.js
+
+# Full ramp test — simulates 2→5→10 concurrent users
+load-test:
+	k6 run \
+	  -e FRONTEND_URL=$(FRONTEND_URL) \
+	  -e VERCEL_BYPASS_SECRET=$(VERCEL_BYPASS_SECRET) \
+	  load-test/stress-test.js
+
+# Full flow test: file upload + plot + cleanup
+load-test-upload:
+	k6 run \
+	  -e FRONTEND_URL=$(FRONTEND_URL) \
+	  -e VERCEL_BYPASS_SECRET=$(VERCEL_BYPASS_SECRET) \
+	  -e SCENARIO=upload \
+	  load-test/stress-test.js
+
+# Save results to JSON for analysis
+load-test-report:
+	k6 run \
+	  --out json=load-test/results.json \
+	  -e FRONTEND_URL=$(FRONTEND_URL) \
+	  -e VERCEL_BYPASS_SECRET=$(VERCEL_BYPASS_SECRET) \
+	  load-test/stress-test.js
+	@echo "Results saved to load-test/results.json"
+
+.PHONY: build rebuild up down restart install-pkg update-pkg logs \
+        smoke-test load-test load-test-upload load-test-report
