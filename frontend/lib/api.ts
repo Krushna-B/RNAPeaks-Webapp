@@ -379,6 +379,7 @@ export interface UtrBindingParams {
   utrFill?: string
   cdsFill?: string
   singleTrackColor?: string
+  side?: "utr5" | "utr3"
 }
 
 export async function runUtrBinding(params: UtrBindingParams): Promise<string> {
@@ -397,6 +398,7 @@ export async function runUtrBinding(params: UtrBindingParams): Promise<string> {
     utr_fill: params.utrFill ?? "",
     cds_fill: params.cdsFill ?? "",
     single_track_color: params.singleTrackColor ?? "",
+    side: params.side ?? "utr5",
   })
 }
 
