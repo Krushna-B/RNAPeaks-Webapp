@@ -9,6 +9,15 @@ suppressPackageStartupMessages({
 UPLOAD_DIR <- Sys.getenv("UPLOAD_DIR", unset = "/tmp/uploads")
 SESSION_TTL_SECS <- 900L # 15 minutes
 
+# Hard cap on how long a single analysis request may run before the worker
+# aborts it. A single-threaded plumber worker cannot detect a client that has
+# refreshed or closed the tab, so without this a runaway/abandoned job would
+# occupy the worker indefinitely and block later requests. Kept just under
+# nginx's 300s proxy_read_timeout so R frees the worker before nginx gives up.
+REQUEST_TIMEOUT_SECS <- as.numeric(
+  Sys.getenv("REQUEST_TIMEOUT_SECS", unset = "280")
+)
+
 # ── Param helpers ───────────────────────────────────────────────────────────────
 
 opt_str <- function(x, default = NULL) {
@@ -444,6 +453,23 @@ function(req, res) {
     return(list(error = "Missing or invalid session ID."))
   }
   req$session_id <- sid
+  plumber::forward()
+}
+
+
+# ── Request timeout ────────────────────────────────────────────────────────────
+# Bound the elapsed time of analysis requests so an abandoned long job cannot
+# pin a worker forever. `transient = TRUE` scopes the limit to the rest of the
+# current request; it resets automatically once the handler returns. When the
+# limit is hit R raises "reached elapsed time limit", which each endpoint's
+# tryCatch surfaces as a 500 and the worker is freed for the next request.
+
+#* @filter timeout
+function(req) {
+  bypass <- c("/health", "/status", "/favicon.ico", "/ingest")
+  if (!(req$PATH_INFO %in% bypass) && !startsWith(req$PATH_INFO, "/__")) {
+    setTimeLimit(elapsed = REQUEST_TIMEOUT_SECS, transient = TRUE)
+  }
   plumber::forward()
 }
 
@@ -888,8 +914,10 @@ function(req, upload_id = NULL, bed_source = NULL,
          gtf_upload_id = NULL,
          species = "hg38", transcripts = NULL, moving_average = NULL, title = NULL,
          line_width = NULL, axis_text_size = NULL, title_size = NULL,
-         utr_fill = NULL, cds_fill = NULL, single_track_color = NULL) {
-  log_info("utr-binding session=", req$session_id, " species=", species)
+         utr_fill = NULL, cds_fill = NULL, single_track_color = NULL,
+         side = "utr5") {
+  log_info("utr-binding session=", req$session_id, " species=", species, " side=", side)
+  side <- match.arg(side, c("utr5", "utr3"))
   tryCatch(
     {
       bed <- resolve_beds(
@@ -924,7 +952,9 @@ function(req, upload_id = NULL, bed_source = NULL,
         style          = style,
         title          = opt_str(title, "")
       )
-      print(plot)
+      # plot_utr_binding returns list(utr5 = list(plot, data), utr3 = ...);
+      # render the requested side only so the client can show each separately.
+      print(plot[[side]]$plot)
     },
     error = function(e) {
       msg <- conditionMessage(e)

@@ -1,11 +1,35 @@
 "use client"
 
+import { useEffect, useRef, useState } from "react"
 import { AlertCircle, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import type { ControlPeaksResult } from "@/lib/api"
 
 const PREVIEW_ROWS = 100
+
+// Stage messages keyed by approximate elapsed seconds.
+// The last entry applies for all remaining time.
+const CONTROL_PEAKS_STAGES: [number, string][] = [
+  [0, "Reading peaks…"],
+  [3, "Loading GENCODE annotation…"],
+  [10, "Matching strand & genomic region…"],
+  [30, "Sampling region-matched control peaks…"],
+  [90, "Finalizing - almost there…"],
+]
+
+function stageLabel(elapsed: number, stages: [number, string][]): string {
+  let label = stages[0][1]
+  for (const [t, msg] of stages) {
+    if (elapsed >= t) label = msg
+  }
+  return label
+}
+
+function formatElapsed(secs: number): string {
+  if (secs < 60) return `${secs}s`
+  return `${Math.floor(secs / 60)}m ${secs % 60}s`
+}
 
 function toCsv(columns: string[], rows: Record<string, string | number>[]): string {
   const escape = (v: string | number) => {
@@ -52,14 +76,54 @@ interface TableResultProps {
 }
 
 export function TableResult({ result, loading, error }: TableResultProps) {
+  const [progress, setProgress] = useState(0)
+  const [elapsed, setElapsed] = useState(0)
+  const startRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (!loading) {
+      const t = setTimeout(() => {
+        setProgress(0)
+        setElapsed(0)
+        startRef.current = null
+      }, 0)
+      return () => clearTimeout(t)
+    }
+
+    startRef.current = Date.now()
+    const initTimer = setTimeout(() => setProgress(8), 0)
+
+    const progressInterval = setInterval(() => {
+      setProgress((p) => {
+        if (p >= 88) return p
+        const inc = Math.random() * (p < 40 ? 5 : p < 70 ? 2.5 : 0.8)
+        return Math.min(p + inc, 88)
+      })
+    }, 700)
+
+    const elapsedInterval = setInterval(() => {
+      if (startRef.current !== null) {
+        setElapsed(Math.floor((Date.now() - startRef.current) / 1000))
+      }
+    }, 1000)
+
+    return () => {
+      clearTimeout(initTimer)
+      clearInterval(progressInterval)
+      clearInterval(elapsedInterval)
+    }
+  }, [loading])
+
   if (loading) {
+    const stage = stageLabel(elapsed, CONTROL_PEAKS_STAGES)
     return (
       <div className="flex h-full items-center justify-center">
         <div className="w-full max-w-sm space-y-3">
-          <Progress value={undefined} className="h-1.5" />
-          <p className="text-center text-xs text-muted-foreground">
-            Sampling region-matched control peaks…
-          </p>
+          <Progress value={progress} className="h-1.5" />
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>{stage}</span>
+            <span className="tabular-nums">{formatElapsed(elapsed)}</span>
+          </div>
         </div>
       </div>
     )

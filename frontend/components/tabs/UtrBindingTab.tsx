@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Play } from "lucide-react"
+import { ChevronLeft, ChevronRight, Download, Play } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -45,6 +45,38 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   )
 }
 
+function downloadPng(url: string, filename: string) {
+  const a = document.createElement("a")
+  a.href = url
+  a.download = filename
+  a.click()
+}
+
+async function downloadPdf(url: string, label: string) {
+  const img = new Image()
+  img.src = url
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve()
+    img.onerror = reject
+  })
+  const canvas = document.createElement("canvas")
+  canvas.width = img.naturalWidth
+  canvas.height = img.naturalHeight
+  const ctx = canvas.getContext("2d")!
+  ctx.drawImage(img, 0, 0)
+  const dataUrl = canvas.toDataURL("image/png")
+  const { jsPDF } = await import("jspdf")
+  const orientation = img.naturalWidth >= img.naturalHeight ? "l" : "p"
+  const pdf = new jsPDF({
+    orientation,
+    unit: "px",
+    format: [img.naturalWidth, img.naturalHeight],
+    hotfixes: ["px_scaling"],
+  })
+  pdf.addImage(dataUrl, "PNG", 0, 0, img.naturalWidth, img.naturalHeight)
+  pdf.save(`rnapeaks-${label}.pdf`)
+}
+
 function Field({
   label,
   hint,
@@ -81,30 +113,47 @@ export function UtrBindingTab() {
   const [cdsFill, setCdsFill] = useState("navy")
   const [singleTrackColor, setSingleTrackColor] = useState("blue")
 
-  const [imageUrl, setImageUrl] = useState<string | null>(null)
+  const [images, setImages] = useState<{ label: string; url: string }[]>([])
+  const [index, setIndex] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   async function handleRun() {
     setLoading(true)
     setError(null)
-    setImageUrl(null)
+    setImages([])
+    setIndex(0)
+
+    const commonParams = {
+      ...bedParams(bed),
+      gtfUploadId: gtfUploadId ?? undefined,
+      species,
+      transcripts,
+      movingAverage,
+      title,
+      lineWidth,
+      axisTextSize,
+      titleSize,
+      utrFill,
+      cdsFill,
+      singleTrackColor,
+    }
+
+    const sides: { side: "utr5" | "utr3"; label: string }[] = [
+      { side: "utr5", label: "5′ UTR" },
+      { side: "utr3", label: "3′ UTR" },
+    ]
+
     try {
-      const url = await runUtrBinding({
-        ...bedParams(bed),
-        gtfUploadId: gtfUploadId ?? undefined,
-        species,
-        transcripts,
-        movingAverage,
-        title,
-        lineWidth,
-        axisTextSize,
-        titleSize,
-        utrFill,
-        cdsFill,
-        singleTrackColor,
-      })
-      setImageUrl(url)
+      const results = await Promise.all(
+        sides.map(({ side, label }) =>
+          runUtrBinding({ ...commonParams, side }).then((url) => ({
+            label,
+            url,
+          }))
+        )
+      )
+      setImages(results)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Analysis failed")
     } finally {
@@ -113,6 +162,8 @@ export function UtrBindingTab() {
   }
 
   const canRun = !loading && hasBed(bed)
+  const showCarousel = images.length > 0 && !loading && !error
+  const curImage = showCarousel ? images[index] : null
 
   return (
     <div className="flex h-full">
@@ -290,12 +341,74 @@ export function UtrBindingTab() {
 
       {/* ── Plot area ── */}
       <div className="flex flex-1 flex-col overflow-hidden p-6">
-        <PlotResult
-          imageUrl={imageUrl}
-          loading={loading}
-          error={error}
-          jobKind="gene"
-        />
+        {showCarousel ? (
+          <div className="flex h-full flex-col gap-3">
+            {/* Nav bar */}
+            <div className="flex shrink-0 items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => setIndex((i) => i - 1)}
+                  disabled={index === 0}
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </Button>
+                <span className="text-sm font-semibold">{curImage!.label}</span>
+                <span className="text-xs text-muted-foreground">
+                  {index + 1} / {images.length}
+                </span>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => setIndex((i) => i + 1)}
+                  disabled={index === images.length - 1}
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    downloadPng(curImage!.url, `rnapeaks-${curImage!.label}.png`)
+                  }
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  PNG
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => downloadPdf(curImage!.url, curImage!.label)}
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  PDF
+                </Button>
+              </div>
+            </div>
+            {/* Image */}
+            <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border bg-white dark:bg-muted/10">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                key={curImage!.url}
+                src={curImage!.url}
+                alt={curImage!.label}
+                className="h-full w-full object-contain"
+              />
+            </div>
+          </div>
+        ) : (
+          <PlotResult
+            imageUrl={null}
+            loading={loading}
+            error={error}
+            jobKind="gene"
+          />
+        )}
       </div>
     </div>
   )
