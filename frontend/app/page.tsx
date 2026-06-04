@@ -1,6 +1,7 @@
 "use client"
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useState } from "react"
+import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { PlotGeneTab } from "@/components/tabs/PlotGeneTab"
 import { PlotRegionTab } from "@/components/tabs/PlotRegionTab"
 import { SplicingMapTab } from "@/components/tabs/SplicingMapTab"
@@ -14,12 +15,47 @@ import { A3ssSequenceMapTab } from "@/components/tabs/A3ssSequenceMapTab"
 import { UtrBindingTab } from "@/components/tabs/UtrBindingTab"
 import { ControlPeaksTab } from "@/components/tabs/ControlPeaksTab"
 import { ThemeToggle } from "@/components/theme-provider"
-import { BookOpen } from "lucide-react"
+import { BookOpen, ChevronDown } from "lucide-react"
+import { cn } from "@/lib/utils"
+
+const NAV_GROUPS = [
+  {
+    label: "Peak Plotter",
+    items: [
+      { value: "plot-gene", label: "Plot Gene" },
+      { value: "plot-region", label: "Plot Region" },
+    ],
+  },
+  {
+    label: "Splicing Analysis",
+    items: [
+      { value: "splicing-map", label: "Splicing Map" },
+      { value: "sequence-map", label: "Sequence Map" },
+      { value: "ri-splicing-map", label: "RI Splicing Map" },
+      { value: "ri-sequence-map", label: "RI Sequence Map" },
+      { value: "a5ss-splicing-map", label: "5' Splicing Map" },
+      { value: "a5ss-sequence-map", label: "5' Sequence Map" },
+      { value: "a3ss-splicing-map", label: "3' Splicing Map" },
+      { value: "a3ss-sequence-map", label: "3' Sequence Map" },
+    ],
+  },
+  {
+    label: "UTR Analysis",
+    items: [{ value: "utr-binding", label: "UTR Binding" }],
+  },
+  {
+    label: "Control Peaks",
+    items: [{ value: "control-peaks", label: "Control Peaks" }],
+  },
+] as const
 
 export default function Home() {
+  const [value, setValue] = useState("plot-gene")
+
   return (
     <Tabs
-      defaultValue="plot-gene"
+      value={value}
+      onValueChange={setValue}
       className="flex h-screen flex-col gap-0 bg-background"
     >
       <header className="shrink-0 border-b bg-card/95 backdrop-blur-sm">
@@ -31,21 +67,57 @@ export default function Home() {
             </span>
           </div>
 
-          {/* Center: tabs */}
-          <TabsList className="h-9">
-            <TabsTrigger value="plot-gene">Plot Gene</TabsTrigger>
-            <TabsTrigger value="plot-region">Plot Region</TabsTrigger>
-            <TabsTrigger value="splicing-map">Splicing Map</TabsTrigger>
-            <TabsTrigger value="sequence-map">Sequence Map</TabsTrigger>
-            <TabsTrigger value="ri-splicing-map">RI Splicing Map</TabsTrigger>
-            <TabsTrigger value="ri-sequence-map">RI Sequence Map</TabsTrigger>
-            <TabsTrigger value="a5ss-splicing-map">5&apos; Splicing Map</TabsTrigger>
-            <TabsTrigger value="a5ss-sequence-map">5&apos; Sequence Map</TabsTrigger>
-            <TabsTrigger value="a3ss-splicing-map">3&apos; Splicing Map</TabsTrigger>
-            <TabsTrigger value="a3ss-sequence-map">3&apos; Sequence Map</TabsTrigger>
-            <TabsTrigger value="utr-binding">UTR Binding</TabsTrigger>
-            <TabsTrigger value="control-peaks">Control Peaks</TabsTrigger>
-          </TabsList>
+          {/* Center: grouped nav */}
+          <nav className="flex items-center gap-1">
+            {NAV_GROUPS.map((group) => {
+              const groupActive = group.items.some((i) => i.value === value)
+              const single = group.items.length === 1
+
+              return (
+                <div key={group.label} className="group relative">
+                  <button
+                    type="button"
+                    onClick={
+                      single ? () => setValue(group.items[0].value) : undefined
+                    }
+                    className={cn(
+                      "flex h-9 items-center gap-1 rounded-md px-3 text-sm font-medium transition-colors",
+                      groupActive
+                        ? "bg-accent text-foreground"
+                        : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                    )}
+                  >
+                    {group.label}
+                    {!single && (
+                      <ChevronDown className="h-3.5 w-3.5 transition-transform group-hover:rotate-180" />
+                    )}
+                  </button>
+
+                  {!single && (
+                    <div className="invisible absolute left-0 top-full z-50 min-w-44 pt-1.5 opacity-0 transition-opacity group-hover:visible group-hover:opacity-100">
+                      <div className="flex flex-col rounded-md border bg-popover p-1 shadow-md">
+                        {group.items.map((item) => (
+                          <button
+                            key={item.value}
+                            type="button"
+                            onClick={() => setValue(item.value)}
+                            className={cn(
+                              "rounded-sm px-2.5 py-1.5 text-left text-sm transition-colors",
+                              item.value === value
+                                ? "bg-accent text-foreground"
+                                : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                            )}
+                          >
+                            {item.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </nav>
 
           {/* Right: docs + theme toggle */}
           <div className="flex items-center justify-end gap-1">
