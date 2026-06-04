@@ -226,7 +226,7 @@ resolve_bam <- function(req, bam_upload_ids, bam_bai_ids, bam_labels, bam_fill_c
 
 # ── rMATS resolver ─────────────────────────────────────────────────────────────
 # Uploaded rMATS table, or the bundled sample matched to the event type:
-# SE -> se_mats_jc, RI -> ri_mats_jc.
+# SE -> se_mats_jc, RI -> ri_mats_jc, A5SS -> a5ss_mats_jc, A3SS -> a3ss_mats_jc.
 resolve_mats <- function(req, mats_upload_id, event_type, endpoint) {
   mid <- opt_str(mats_upload_id)
   if (!is.null(mid)) {
@@ -237,6 +237,12 @@ resolve_mats <- function(req, mats_upload_id, event_type, endpoint) {
   if (identical(event_type, "RI")) {
     log_info(endpoint, ": using built-in ri_mats_jc")
     RNAPeaks::ri_mats_jc
+  } else if (identical(event_type, "A5SS")) {
+    log_info(endpoint, ": using built-in a5ss_mats_jc")
+    RNAPeaks::a5ss_mats_jc
+  } else if (identical(event_type, "A3SS")) {
+    log_info(endpoint, ": using built-in a3ss_mats_jc")
+    RNAPeaks::a3ss_mats_jc
   } else {
     log_info(endpoint, ": using built-in se_mats_jc")
     RNAPeaks::se_mats_jc
@@ -363,6 +369,9 @@ cleanup_old_sessions <- function() {
 #* @plumber
 function(pr) {
   pr$setErrorHandler(function(req, res, err) {
+    # Error path: clear any per-request elapsed limit before returning so it
+    # cannot leak into the later event loop (see the postroute hook below).
+    setTimeLimit(cpu = Inf, elapsed = Inf)
     msg <- conditionMessage(err)
     log_error(req$REQUEST_METHOD, " ", req$PATH_INFO, " -> ", msg)
     res$status <- 500
@@ -372,6 +381,19 @@ function(pr) {
     # jsonlite::unbox ensures the string serializes as a scalar, not an array.
     list(error = jsonlite::unbox(msg))
   })
+
+  # The `timeout` filter arms a per-request elapsed limit via setTimeLimit().
+  # `transient = TRUE` is documented to reset when control returns to the R
+  # top-level prompt — but plumber never returns there: it stays inside the
+  # `later` event loop between requests. So a limit armed during a request
+  # leaks past the handler and eventually fires while the worker is idle in
+  # later::execCallbacks ("reached elapsed time limit"), halting the process.
+  # Clear the limit on the success path here, after the handler has returned.
+  pr$registerHooks(list(
+    postroute = function() {
+      setTimeLimit(cpu = Inf, elapsed = Inf)
+    }
+  ))
 }
 
 
@@ -459,10 +481,15 @@ function(req, res) {
 
 # ── Request timeout ────────────────────────────────────────────────────────────
 # Bound the elapsed time of analysis requests so an abandoned long job cannot
-# pin a worker forever. `transient = TRUE` scopes the limit to the rest of the
-# current request; it resets automatically once the handler returns. When the
-# limit is hit R raises "reached elapsed time limit", which each endpoint's
-# tryCatch surfaces as a 500 and the worker is freed for the next request.
+# pin a worker forever. When the limit is hit R raises "reached elapsed time
+# limit", which each endpoint's tryCatch surfaces as a 500 and the worker is
+# freed for the next request.
+#
+# NOTE: `transient = TRUE` does NOT auto-reset here — it only resets when R
+# returns to the top-level prompt, and plumber stays in the `later` event loop
+# between requests. The limit is therefore cleared explicitly after every
+# request by the postroute hook and error handler in the @plumber block above;
+# without that the leaked limit fires while the worker is idle and halts it.
 
 #* @filter timeout
 function(req) {
@@ -899,6 +926,184 @@ function(req, mats_upload_id = NULL, sequence, genome = "hg38",
     error = function(e) {
       msg <- conditionMessage(e)
       log_error("ri-sequence-map: ", msg)
+      stop(msg)
+    }
+  )
+}
+
+
+# ── A5SS Splicing Map ──────────────────────────────────────────────────────────
+
+#* @post /a5ss-splicing-map
+#* @serializer png list(width = 1400, height = 900, res = 150)
+function(req, bed_upload_id = NULL, bed_source = NULL, mats_upload_id = NULL,
+         WidthIntoExon = "50", WidthIntoIntron = "300", moving_average = "50",
+         p_valueRetainedAndExclusion = NULL, p_valueControls = NULL,
+         retained_IncLevelDifference = NULL, exclusion_IncLevelDifference = NULL,
+         Min_Count = NULL, groups = NULL, control_multiplier = NULL, control_iterations = NULL,
+         fdr_threshold = NULL,
+         title = NULL, retained_col = NULL, excluded_col = NULL, control_col = NULL,
+         exon_col = NULL, line_width = NULL, axis_text_size = NULL, title_size = NULL) {
+  log_info("a5ss-splicing-map session=", req$session_id)
+  tryCatch(
+    {
+      bed <- resolve_bed(req, bed_upload_id, bed_source, "a5ss-splicing-map")
+      mats <- resolve_mats(req, mats_upload_id, "A5SS", "a5ss-splicing-map")
+      plot <- five_prime_splicing_map(
+        events = mats,
+        bed_file = bed,
+        opts = build_splicing_options(
+          WidthIntoExon, WidthIntoIntron, moving_average,
+          p_valueRetainedAndExclusion, p_valueControls,
+          retained_IncLevelDifference, exclusion_IncLevelDifference,
+          Min_Count, groups, control_multiplier, control_iterations, fdr_threshold
+        ),
+        style = build_splicing_style(
+          retained_col, excluded_col, control_col, exon_col,
+          line_width, axis_text_size, title_size
+        ),
+        title = opt_str(title, "")
+      )
+      print(plot)
+    },
+    error = function(e) {
+      msg <- conditionMessage(e)
+      log_error("a5ss-splicing-map: ", msg)
+      stop(msg)
+    }
+  )
+}
+
+
+# ── A5SS Sequence Map ───────────────────────────────────────────────────────────
+
+#* @post /a5ss-sequence-map
+#* @serializer png list(width = 1400, height = 900, res = 150)
+function(req, mats_upload_id = NULL, sequence, genome = "hg38",
+         motif_mode = "combined",
+         WidthIntoExon = "50", WidthIntoIntron = "250", moving_average = "40",
+         p_valueRetainedAndExclusion = NULL, p_valueControls = NULL,
+         retained_IncLevelDifference = NULL, exclusion_IncLevelDifference = NULL,
+         Min_Count = NULL, groups = NULL, control_multiplier = NULL, control_iterations = NULL,
+         fdr_threshold = NULL,
+         title = NULL, retained_col = NULL, excluded_col = NULL, control_col = NULL,
+         exon_col = NULL, line_width = NULL, axis_text_size = NULL, title_size = NULL) {
+  log_info("a5ss-sequence-map session=", req$session_id, " sequence=", sequence, " motif_mode=", motif_mode)
+  tryCatch(
+    {
+      mats <- resolve_mats(req, mats_upload_id, "A5SS", "a5ss-sequence-map")
+      motifs <- parse_motifs(sequence)
+      plot <- five_prime_sequence_map(
+        events = mats,
+        sequence = motifs,
+        genome = opt_str(genome, "hg38"),
+        motif_mode = motif_mode,
+        opts = build_splicing_options(
+          WidthIntoExon, WidthIntoIntron, moving_average,
+          p_valueRetainedAndExclusion, p_valueControls,
+          retained_IncLevelDifference, exclusion_IncLevelDifference,
+          Min_Count, groups, control_multiplier, control_iterations, fdr_threshold
+        ),
+        style = build_splicing_style(
+          retained_col, excluded_col, control_col, exon_col,
+          line_width, axis_text_size, title_size
+        ),
+        title = opt_str(title, "")
+      )
+      print(plot)
+    },
+    error = function(e) {
+      msg <- conditionMessage(e)
+      log_error("a5ss-sequence-map: ", msg)
+      stop(msg)
+    }
+  )
+}
+
+
+# ── A3SS Splicing Map ──────────────────────────────────────────────────────────
+
+#* @post /a3ss-splicing-map
+#* @serializer png list(width = 1400, height = 900, res = 150)
+function(req, bed_upload_id = NULL, bed_source = NULL, mats_upload_id = NULL,
+         WidthIntoExon = "50", WidthIntoIntron = "300", moving_average = "50",
+         p_valueRetainedAndExclusion = NULL, p_valueControls = NULL,
+         retained_IncLevelDifference = NULL, exclusion_IncLevelDifference = NULL,
+         Min_Count = NULL, groups = NULL, control_multiplier = NULL, control_iterations = NULL,
+         fdr_threshold = NULL,
+         title = NULL, retained_col = NULL, excluded_col = NULL, control_col = NULL,
+         exon_col = NULL, line_width = NULL, axis_text_size = NULL, title_size = NULL) {
+  log_info("a3ss-splicing-map session=", req$session_id)
+  tryCatch(
+    {
+      bed <- resolve_bed(req, bed_upload_id, bed_source, "a3ss-splicing-map")
+      mats <- resolve_mats(req, mats_upload_id, "A3SS", "a3ss-splicing-map")
+      plot <- three_prime_splicing_map(
+        events = mats,
+        bed_file = bed,
+        opts = build_splicing_options(
+          WidthIntoExon, WidthIntoIntron, moving_average,
+          p_valueRetainedAndExclusion, p_valueControls,
+          retained_IncLevelDifference, exclusion_IncLevelDifference,
+          Min_Count, groups, control_multiplier, control_iterations, fdr_threshold
+        ),
+        style = build_splicing_style(
+          retained_col, excluded_col, control_col, exon_col,
+          line_width, axis_text_size, title_size
+        ),
+        title = opt_str(title, "")
+      )
+      print(plot)
+    },
+    error = function(e) {
+      msg <- conditionMessage(e)
+      log_error("a3ss-splicing-map: ", msg)
+      stop(msg)
+    }
+  )
+}
+
+
+# ── A3SS Sequence Map ───────────────────────────────────────────────────────────
+
+#* @post /a3ss-sequence-map
+#* @serializer png list(width = 1400, height = 900, res = 150)
+function(req, mats_upload_id = NULL, sequence, genome = "hg38",
+         motif_mode = "combined",
+         WidthIntoExon = "50", WidthIntoIntron = "250", moving_average = "40",
+         p_valueRetainedAndExclusion = NULL, p_valueControls = NULL,
+         retained_IncLevelDifference = NULL, exclusion_IncLevelDifference = NULL,
+         Min_Count = NULL, groups = NULL, control_multiplier = NULL, control_iterations = NULL,
+         fdr_threshold = NULL,
+         title = NULL, retained_col = NULL, excluded_col = NULL, control_col = NULL,
+         exon_col = NULL, line_width = NULL, axis_text_size = NULL, title_size = NULL) {
+  log_info("a3ss-sequence-map session=", req$session_id, " sequence=", sequence, " motif_mode=", motif_mode)
+  tryCatch(
+    {
+      mats <- resolve_mats(req, mats_upload_id, "A3SS", "a3ss-sequence-map")
+      motifs <- parse_motifs(sequence)
+      plot <- three_prime_sequence_map(
+        events = mats,
+        sequence = motifs,
+        genome = opt_str(genome, "hg38"),
+        motif_mode = motif_mode,
+        opts = build_splicing_options(
+          WidthIntoExon, WidthIntoIntron, moving_average,
+          p_valueRetainedAndExclusion, p_valueControls,
+          retained_IncLevelDifference, exclusion_IncLevelDifference,
+          Min_Count, groups, control_multiplier, control_iterations, fdr_threshold
+        ),
+        style = build_splicing_style(
+          retained_col, excluded_col, control_col, exon_col,
+          line_width, axis_text_size, title_size
+        ),
+        title = opt_str(title, "")
+      )
+      print(plot)
+    },
+    error = function(e) {
+      msg <- conditionMessage(e)
+      log_error("a3ss-sequence-map: ", msg)
       stop(msg)
     }
   )
