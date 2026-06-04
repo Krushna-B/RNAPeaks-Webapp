@@ -7,6 +7,10 @@ import { SplicingMapTab } from "@/components/tabs/SplicingMapTab"
 import { SequenceMapTab } from "@/components/tabs/SequenceMapTab"
 import { RISplicingMapTab } from "@/components/tabs/RISplicingMapTab"
 import { RISequenceMapTab } from "@/components/tabs/RISequenceMapTab"
+import { A5ssSplicingMapTab } from "@/components/tabs/A5ssSplicingMapTab"
+import { A5ssSequenceMapTab } from "@/components/tabs/A5ssSequenceMapTab"
+import { A3ssSplicingMapTab } from "@/components/tabs/A3ssSplicingMapTab"
+import { A3ssSequenceMapTab } from "@/components/tabs/A3ssSequenceMapTab"
 import { UtrBindingTab } from "@/components/tabs/UtrBindingTab"
 import { ControlPeaksTab } from "@/components/tabs/ControlPeaksTab"
 import { ThemeToggle } from "@/components/theme-provider"
@@ -35,6 +39,10 @@ export default function Home() {
             <TabsTrigger value="sequence-map">Sequence Map</TabsTrigger>
             <TabsTrigger value="ri-splicing-map">RI Splicing Map</TabsTrigger>
             <TabsTrigger value="ri-sequence-map">RI Sequence Map</TabsTrigger>
+            <TabsTrigger value="a5ss-splicing-map">5&apos; Splicing Map</TabsTrigger>
+            <TabsTrigger value="a5ss-sequence-map">5&apos; Sequence Map</TabsTrigger>
+            <TabsTrigger value="a3ss-splicing-map">3&apos; Splicing Map</TabsTrigger>
+            <TabsTrigger value="a3ss-sequence-map">3&apos; Sequence Map</TabsTrigger>
             <TabsTrigger value="utr-binding">UTR Binding</TabsTrigger>
             <TabsTrigger value="control-peaks">Control Peaks</TabsTrigger>
           </TabsList>
@@ -90,6 +98,30 @@ export default function Home() {
         className="mt-0 min-h-0 flex-1 overflow-hidden"
       >
         <RISequenceMapTab />
+      </TabsContent>
+      <TabsContent
+        value="a5ss-splicing-map"
+        className="mt-0 min-h-0 flex-1 overflow-hidden"
+      >
+        <A5ssSplicingMapTab />
+      </TabsContent>
+      <TabsContent
+        value="a5ss-sequence-map"
+        className="mt-0 min-h-0 flex-1 overflow-hidden"
+      >
+        <A5ssSequenceMapTab />
+      </TabsContent>
+      <TabsContent
+        value="a3ss-splicing-map"
+        className="mt-0 min-h-0 flex-1 overflow-hidden"
+      >
+        <A3ssSplicingMapTab />
+      </TabsContent>
+      <TabsContent
+        value="a3ss-sequence-map"
+        className="mt-0 min-h-0 flex-1 overflow-hidden"
+      >
+        <A3ssSequenceMapTab />
       </TabsContent>
       <TabsContent
         value="utr-binding"

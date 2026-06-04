@@ -362,6 +362,70 @@ export async function runRISequenceMap(
   })
 }
 
+// ── A5SS SplicingMap ───────────────────────────────────────────────────────────
+
+export async function runA5ssSplicingMap(
+  params: SplicingMapParams
+): Promise<string> {
+  return fetchPlot("a5ss-splicing-map", {
+    bed_upload_id: params.bedUploadId,
+    bed_source: params.bedSource ?? "",
+    mats_upload_id: params.matsUploadId,
+    WidthIntoExon: params.widthIntoExon,
+    WidthIntoIntron: params.widthIntoIntron,
+    moving_average: params.movingAverage,
+    ...mapAdvancedToRecord(params),
+  })
+}
+
+// ── A5SS SequenceMap ───────────────────────────────────────────────────────────
+
+export async function runA5ssSequenceMap(
+  params: SequenceMapParams
+): Promise<string> {
+  return fetchPlot("a5ss-sequence-map", {
+    mats_upload_id: params.matsUploadId,
+    sequence: params.sequence,
+    motif_mode: params.motifMode ?? "combined",
+    WidthIntoExon: params.widthIntoExon,
+    WidthIntoIntron: params.widthIntoIntron,
+    moving_average: params.movingAverage,
+    ...mapAdvancedToRecord(params),
+  })
+}
+
+// ── A3SS SplicingMap ───────────────────────────────────────────────────────────
+
+export async function runA3ssSplicingMap(
+  params: SplicingMapParams
+): Promise<string> {
+  return fetchPlot("a3ss-splicing-map", {
+    bed_upload_id: params.bedUploadId,
+    bed_source: params.bedSource ?? "",
+    mats_upload_id: params.matsUploadId,
+    WidthIntoExon: params.widthIntoExon,
+    WidthIntoIntron: params.widthIntoIntron,
+    moving_average: params.movingAverage,
+    ...mapAdvancedToRecord(params),
+  })
+}
+
+// ── A3SS SequenceMap ───────────────────────────────────────────────────────────
+
+export async function runA3ssSequenceMap(
+  params: SequenceMapParams
+): Promise<string> {
+  return fetchPlot("a3ss-sequence-map", {
+    mats_upload_id: params.matsUploadId,
+    sequence: params.sequence,
+    motif_mode: params.motifMode ?? "combined",
+    WidthIntoExon: params.widthIntoExon,
+    WidthIntoIntron: params.widthIntoIntron,
+    moving_average: params.movingAverage,
+    ...mapAdvancedToRecord(params),
+  })
+}
+
 // ── UTR Binding ────────────────────────────────────────────────────────────────
 
 export interface UtrBindingParams {
