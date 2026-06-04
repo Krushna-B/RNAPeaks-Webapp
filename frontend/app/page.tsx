@@ -58,7 +58,7 @@ export default function Home() {
       onValueChange={setValue}
       className="flex h-screen flex-col gap-0 bg-background"
     >
-      <header className="shrink-0 border-b bg-card/95 backdrop-blur-sm">
+      <header className="relative z-50 shrink-0 border-b bg-card/95 backdrop-blur-sm">
         <div className="grid h-14 grid-cols-[1fr_auto_1fr] items-center gap-4 px-5">
           {/* Left: branding */}
           <div className="flex items-center">
