@@ -491,3 +491,63 @@ export async function runControlPeaks(
     seed: params.seed ?? "",
   })
 }
+
+// ── K-mer Enrichment ────────────────────────────────────────────────────────────
+
+// One set is either a BED (built-in track or an uploaded file) or a pasted
+// list of gene / transcript ids.
+export interface KmerSetParams {
+  mode: "bed" | "ids"
+  bedSource?: string // K562 | HepG2 (when mode = bed, no upload)
+  uploadId?: string // uploaded BED id (when mode = bed, uploaded)
+  ids?: string // comma/whitespace-separated ids (when mode = ids)
+}
+
+export interface KmerEnrichmentParams {
+  setA: KmerSetParams
+  setB: KmerSetParams
+  k: string
+  species: string
+  gtfUploadId?: string
+  labelA?: string
+  labelB?: string
+  topN?: string
+  title?: string
+}
+
+export interface KmerPlot {
+  name: string
+  label: string
+  image: string // base64 data URI
+}
+
+export interface KmerEnrichmentResult {
+  plots: KmerPlot[]
+  table: {
+    total: number
+    columns: string[]
+    rows: Record<string, string | number>[]
+  }
+}
+
+export async function runKmerEnrichment(
+  params: KmerEnrichmentParams
+): Promise<KmerEnrichmentResult> {
+  return fetchJson<KmerEnrichmentResult>("kmer-enrichment", {
+    set_a_mode: params.setA.mode,
+    set_a_bed_source: params.setA.bedSource ?? "",
+    set_a_upload_id: params.setA.uploadId ?? "",
+    set_a_ids: params.setA.ids ?? "",
+    set_b_mode: params.setB.mode,
+    set_b_bed_source: params.setB.bedSource ?? "",
+    set_b_upload_id: params.setB.uploadId ?? "",
+    set_b_ids: params.setB.ids ?? "",
+    k: params.k,
+    species: params.species,
+    gtf_upload_id: params.gtfUploadId ?? "",
+    label_a: params.labelA ?? "",
+    label_b: params.labelB ?? "",
+    top_n: params.topN ?? "",
+    title: params.title ?? "",
+  })
+}
