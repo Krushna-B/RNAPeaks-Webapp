@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import logger from "@/lib/logger"
-import { KATSS_API_URL, katssFetch } from "@/lib/katssServer"
+import {
+  KATSS_API_URL,
+  katssFetch,
+  captureKatssBackendError,
+} from "@/lib/katssServer"
 
 export const runtime = "nodejs"
 
@@ -27,6 +31,11 @@ export async function GET(
 
   if (!res.ok) {
     const text = await res.text()
+    captureKatssBackendError(
+      `results/${jobId}/download/visualization/${filename}`,
+      res.status,
+      text
+    )
     return new NextResponse(text, { status: res.status })
   }
 

@@ -6,8 +6,29 @@
 // absorbed here with a per-attempt timeout and a few retries on idempotent
 // (GET) requests, so a single hiccup does not fail a whole job.
 
+import * as Sentry from "@sentry/nextjs"
+
 export const KATSS_API_URL =
   process.env.KATSS_API_URL ?? "https://katsswebserver.onrender.com"
+
+// Report a KATSS backend HTTP error to Sentry. Only 5xx (the job server itself
+// is broken) is alert-worthy; 4xx is caller error and passes through silently.
+export function captureKatssBackendError(
+  endpoint: string,
+  status: number,
+  body: string
+): void {
+  if (status < 500) return
+  Sentry.captureMessage(`KATSS backend ${status} on ${endpoint}`, {
+    level: "error",
+    extra: { endpoint, status, responseBody: body.slice(0, 500) },
+    tags: {
+      layer: "katss",
+      error_type: "backend_5xx",
+      status: String(status),
+    },
+  })
+}
 
 interface KatssFetchOptions {
   retries?: number
@@ -34,5 +55,13 @@ export async function katssFetch(
       }
     }
   }
+  // All retries exhausted — the KATSS server is genuinely unreachable, not just
+  // a transient blip the retries absorbed. Alert once, here, so every caller
+  // route is covered without repeating the capture block.
+  Sentry.captureException(lastErr, {
+    level: "error",
+    extra: { url, attempts: retries + 1 },
+    tags: { layer: "katss", error_type: "network" },
+  })
   throw lastErr
 }

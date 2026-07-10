@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import logger from "@/lib/logger"
-import { KATSS_API_URL, katssFetch } from "@/lib/katssServer"
+import {
+  KATSS_API_URL,
+  katssFetch,
+  captureKatssBackendError,
+} from "@/lib/katssServer"
 
 // KATSS is a public, unauthenticated third-party job server. We proxy it
 // server-side (rather than calling from the browser) so cross-origin fetches
@@ -46,6 +50,7 @@ export async function POST(req: NextRequest) {
   }
 
   const text = await res.text()
+  captureKatssBackendError("jobs/submit", res.status, text)
   return new NextResponse(text, {
     status: res.status,
     headers: { "content-type": res.headers.get("content-type") ?? "application/json" },
