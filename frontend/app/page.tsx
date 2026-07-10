@@ -14,6 +14,8 @@ import { A3ssSplicingMapTab } from "@/components/tabs/A3ssSplicingMapTab"
 import { A3ssSequenceMapTab } from "@/components/tabs/A3ssSequenceMapTab"
 import { UtrBindingTab } from "@/components/tabs/UtrBindingTab"
 import { ControlPeaksTab } from "@/components/tabs/ControlPeaksTab"
+import { KmerEnrichmentTab } from "@/components/tabs/KmerEnrichmentTab"
+import { KatssEnrichmentTab } from "@/components/tabs/KatssEnrichmentTab"
 import { ThemeToggle } from "@/components/theme-provider"
 import { BookOpen, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -46,6 +48,14 @@ const NAV_GROUPS = [
   {
     label: "Control Peaks",
     items: [{ value: "control-peaks", label: "Control Peaks" }],
+  },
+  {
+    label: "K-mer Enrichment",
+    items: [{ value: "kmer-enrichment", label: "K-mer Enrichment" }],
+  },
+  {
+    label: "KATSS",
+    items: [{ value: "katss-enrichment", label: "KATSS Enrichment" }],
   },
 ] as const
 
@@ -206,6 +216,18 @@ export default function Home() {
         className="mt-0 min-h-0 flex-1 overflow-hidden"
       >
         <ControlPeaksTab />
+      </TabsContent>
+      <TabsContent
+        value="kmer-enrichment"
+        className="mt-0 min-h-0 flex-1 overflow-hidden"
+      >
+        <KmerEnrichmentTab />
+      </TabsContent>
+      <TabsContent
+        value="katss-enrichment"
+        className="mt-0 min-h-0 flex-1 overflow-hidden"
+      >
+        <KatssEnrichmentTab />
       </TabsContent>
     </Tabs>
   )

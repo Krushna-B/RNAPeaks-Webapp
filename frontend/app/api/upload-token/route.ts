@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import * as Sentry from "@sentry/nextjs"
 
 const HF_SPACE_URL = process.env.HF_SPACE_URL
 const HF_SECRET_TOKEN = process.env.HF_SECRET_TOKEN ?? ""
@@ -44,6 +45,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Backend not configured" }, { status: 503 })
   }
   if (!SESSION_SECRET || !HF_SECRET_TOKEN) {
+    Sentry.captureMessage(
+      "Upload-token route: SESSION_SECRET or HF_SECRET_TOKEN not configured",
+      { level: "error", tags: { layer: "upload-token", error_type: "misconfig" } }
+    )
     return NextResponse.json({ error: "Server misconfigured" }, { status: 500 })
   }
 

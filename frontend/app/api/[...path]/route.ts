@@ -52,6 +52,10 @@ async function proxyRequest(
     )
   }
   if (!SESSION_SECRET) {
+    Sentry.captureMessage("Proxy: SESSION_SECRET not configured", {
+      level: "error",
+      tags: { layer: "proxy", error_type: "misconfig" },
+    })
     return NextResponse.json({ error: "Server misconfigured" }, { status: 500 })
   }
 

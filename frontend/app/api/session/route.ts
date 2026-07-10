@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import * as Sentry from "@sentry/nextjs"
 
 const SESSION_SECRET = process.env.SESSION_SECRET ?? ""
 const TOKEN_TTL_SECS = 86400 // 24 hours - matches proxy validation
@@ -20,6 +21,10 @@ async function hmacHex(message: string, secret: string): Promise<string> {
 
 export async function GET() {
   if (!SESSION_SECRET) {
+    Sentry.captureMessage("Session route: SESSION_SECRET not configured", {
+      level: "error",
+      tags: { layer: "session", error_type: "misconfig" },
+    })
     return NextResponse.json({ error: "Server misconfigured" }, { status: 500 })
   }
 

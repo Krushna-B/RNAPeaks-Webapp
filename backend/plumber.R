@@ -364,6 +364,38 @@ cleanup_old_sessions <- function() {
 }
 
 
+# ── k-mer enrichment helpers ────────────────────────────────────────────────────
+# kmer_enrichment() compares two sets, each of which is either a BED (built-in
+# or uploaded) or a vector of gene / transcript ids. Resolve one set from the
+# per-set flat params to whatever kmer_enrichment() accepts.
+resolve_kmer_set <- function(req, mode, bed_source, upload_id, ids, endpoint, which) {
+  if (identical(opt_str(mode), "ids")) {
+    v <- opt_str(ids)
+    if (is.null(v)) stop(paste0("No ids supplied for ", which, "."))
+    out <- trimws(strsplit(v, "[,\\s]+")[[1]])
+    out <- out[nzchar(out)]
+    if (length(out) == 0L) stop(paste0("No ids supplied for ", which, "."))
+    log_info(endpoint, ": ", which, " = ", length(out), " id(s)")
+    return(out)
+  }
+  # BED mode: uploaded file wins, else built-in source, else K562 default.
+  resolve_bed(req, upload_id, bed_source, paste0(endpoint, ":", which))
+}
+
+# kmer_enrichment() returns ggplots in a list; the endpoint returns JSON, so
+# each plot is rendered off-screen to a PNG and inlined as a base64 data URI.
+# jsonlite (already loaded by plumber) provides base64_enc, so no extra dep.
+ggplot_to_data_uri <- function(plot, width = 1400, height = 900, res = 150) {
+  tmp <- tempfile(fileext = ".png")
+  on.exit(unlink(tmp), add = TRUE)
+  grDevices::png(tmp, width = width, height = height, res = res)
+  print(plot)
+  grDevices::dev.off()
+  raw <- readBin(tmp, "raw", n = file.info(tmp)$size)
+  paste0("data:image/png;base64,", jsonlite::base64_enc(raw))
+}
+
+
 # ── Router config ──────────────────────────────────────────────────────────────
 
 #* @plumber
@@ -1195,6 +1227,76 @@ function(req, upload_id = NULL, bed_source = NULL, threads = 23, seed = NULL) {
     total   = nrow(result),
     columns = colnames(result),
     rows    = result
+  )
+}
+
+
+# ── K-mer Enrichment ─────────────────────────────────────────────────────────────
+# Compares two sets and returns MULTIPLE results in one response: a scatter
+# plot, a rank plot, and an enrichment table. Because the analysis is expensive
+# (GTF load + genome sequence extraction + k-mer counting for both sets) it is
+# computed ONCE and everything returned together — the plots inlined as base64
+# data URIs alongside the table — rather than split across per-view endpoints.
+
+#* @post /kmer-enrichment
+#* @serializer json
+function(req,
+         set_a_mode = "bed", set_a_bed_source = NULL, set_a_upload_id = NULL, set_a_ids = NULL,
+         set_b_mode = "bed", set_b_bed_source = NULL, set_b_upload_id = NULL, set_b_ids = NULL,
+         k = "4", species = "hg38", gtf_upload_id = NULL,
+         label_a = NULL, label_b = NULL, top_n = NULL, title = NULL) {
+  log_info("kmer-enrichment session=", req$session_id, " k=", k, " species=", species)
+  tryCatch(
+    {
+      set_a <- resolve_kmer_set(
+        req, set_a_mode, set_a_bed_source, set_a_upload_id, set_a_ids,
+        "kmer-enrichment", "set_a"
+      )
+      set_b <- resolve_kmer_set(
+        req, set_b_mode, set_b_bed_source, set_b_upload_id, set_b_ids,
+        "kmer-enrichment", "set_b"
+      )
+      gtf_path <- resolve_gtf_path(req, gtf_upload_id, "kmer-enrichment")
+
+      result <- kmer_enrichment(
+        set_a   = set_a,
+        set_b   = set_b,
+        k       = as.integer(k),
+        gtf     = gtf_path,
+        species = species,
+        label_a = opt_str(label_a, "Set A"),
+        label_b = opt_str(label_b, "Set B"),
+        top_n   = opt_int(top_n, 20),
+        title   = opt_str(title, "")
+      )
+
+      tbl <- result$table
+      log_info("kmer-enrichment: ", nrow(tbl), " k-mers")
+      list(
+        plots = list(
+          list(
+            name  = "scatter",
+            label = "Scatter",
+            image = ggplot_to_data_uri(result$plots$scatter)
+          ),
+          list(
+            name  = "rank",
+            label = "Rank",
+            image = ggplot_to_data_uri(result$plots$rank)
+          )
+        ),
+        table = list(
+          total   = nrow(tbl),
+          columns = colnames(tbl),
+          rows    = tbl
+        )
+      )
+    },
+    error = function(e) {
+      msg <- conditionMessage(e)
+      log_error("kmer-enrichment: ", msg)
+      stop(msg)
+    }
   )
 }
 
