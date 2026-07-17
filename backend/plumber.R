@@ -395,6 +395,17 @@ ggplot_to_data_uri <- function(plot, width = 1400, height = 900, res = 150) {
   paste0("data:image/png;base64,", jsonlite::base64_enc(raw))
 }
 
+# The peaks pipeline returns invisible(NULL) when a request resolves to no
+# renderable data (e.g. a gene with no peaks in its window). print(NULL) draws
+# nothing to the device, so the png serializer then dies with the opaque
+# "device output file is missing". Turn that empty result into a clear,
+# user-facing message instead — the error handler serializes it as JSON and the
+# frontend surfaces it verbatim.
+render_plot <- function(plot, empty_msg) {
+  if (is.null(plot)) stop(empty_msg)
+  print(plot)
+}
+
 
 # ── Router config ──────────────────────────────────────────────────────────────
 
@@ -694,7 +705,7 @@ function(req, upload_id = NULL, bed_source = NULL,
         peaks_opts = opts,
         style      = style
       )
-      print(plot)
+      render_plot(plot, paste0("No peaks found for ", geneID, " in the selected region."))
     },
     error = function(e) {
       msg <- conditionMessage(e)
@@ -775,7 +786,7 @@ function(req, upload_id = NULL, bed_source = NULL,
         peaks_opts = opts,
         style      = style
       )
-      print(plot)
+      render_plot(plot, paste0("No peaks found in ", Chr, ":", Start, "-", End, " (", Strand, ")."))
     },
     error = function(e) {
       msg <- conditionMessage(e)
