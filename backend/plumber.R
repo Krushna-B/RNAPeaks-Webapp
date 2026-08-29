@@ -35,6 +35,18 @@ opt_groups <- function(x) {
   v <- opt_str(x)
   if (is.null(v)) c("Negative", "Positive", "Control") else strsplit(v, ",")[[1]]
 }
+# Comma-separated string -> trimmed, non-empty character vector, or NULL when
+# blank. Used for peaks_options include / order_in (both accept a vector of
+# track names, or NULL to disable).
+opt_char_vec <- function(x) {
+  v <- opt_str(x)
+  if (is.null(v)) {
+    return(NULL)
+  }
+  out <- trimws(strsplit(v, ",")[[1]])
+  out <- out[nzchar(out)]
+  if (length(out) == 0L) NULL else out
+}
 # Translate legacy group names to the new RNAPeaks vocabulary so older clients
 # (or cached frontends) keep working: Retained = positive ΔΨ, Excluded = negative.
 map_groups <- function(groups) {
@@ -263,7 +275,8 @@ build_splicing_options <- function(WidthIntoExon, WidthIntoIntron, moving_averag
                                    p_valueRetainedAndExclusion, p_valueControls,
                                    retained_IncLevelDifference, exclusion_IncLevelDifference,
                                    Min_Count, groups, control_multiplier,
-                                   control_iterations, fdr_threshold) {
+                                   control_iterations, fdr_threshold,
+                                   stat_test, psi_control_max) {
   splicing_options(
     width_exon = as.integer(WidthIntoExon),
     width_intron = as.integer(WidthIntoIntron),
@@ -274,10 +287,12 @@ build_splicing_options <- function(WidthIntoExon, WidthIntoIntron, moving_averag
       opt_num(exclusion_IncLevelDifference, -0.1),
       opt_num(retained_IncLevelDifference, 0.1)
     ),
+    psi_control_max = opt_num(psi_control_max, 0.005),
     min_count = opt_int(Min_Count, 50),
     groups = map_groups(opt_groups(groups)),
     control_multiplier = opt_num(control_multiplier, 2.0),
     control_iterations = opt_int(control_iterations, 20),
+    stat_test = opt_str(stat_test, "fisher-all"),
     use_fdr = TRUE,
     fdr_threshold = opt_num(fdr_threshold, 0.05),
     verbose = FALSE
@@ -645,6 +660,7 @@ function(req, upload_id = NULL, bed_source = NULL,
          bed_sources = NULL, bed_upload_ids = NULL, bed_labels = NULL,
          geneID, species = "hg38", peak_col = "purple",
          order_by = "Count", five_to_three = "FALSE",
+         include = NULL, order_in = NULL,
          TxID = NULL, merge = NULL, total_arrows = NULL, max_per_intron = NULL,
          gtf_upload_id = NULL, max_proteins = NULL,
          title_size = NULL, label_size = NULL, axis_breaks_n = NULL,
@@ -672,7 +688,9 @@ function(req, upload_id = NULL, bed_source = NULL,
       opts <- peaks_options(
         order_by     = map_order_by(order_by),
         collapse     = opt_num(merge, 0),
-        max_proteins = opt_int(max_proteins, 100)
+        max_proteins = opt_int(max_proteins, 100),
+        include      = opt_char_vec(include),
+        order_in     = opt_char_vec(order_in)
       )
 
       style <- peaks_plot_style(
@@ -724,6 +742,7 @@ function(req, upload_id = NULL, bed_source = NULL,
          bed_sources = NULL, bed_upload_ids = NULL, bed_labels = NULL,
          Chr, Start, End, Strand, species = "hg38",
          peak_col = "purple", order_by = "Count",
+         include = NULL, order_in = NULL,
          geneID = NULL, TxID = NULL, merge = NULL, total_arrows = NULL, max_per_intron = NULL,
          exon_col = NULL, utr_col = NULL, gtf_upload_id = NULL,
          max_proteins = NULL, title_size = NULL, label_size = NULL, axis_breaks_n = NULL,
@@ -749,7 +768,9 @@ function(req, upload_id = NULL, bed_source = NULL,
       opts <- peaks_options(
         order_by     = map_order_by(order_by),
         collapse     = opt_num(merge, 0),
-        max_proteins = opt_int(max_proteins, 100)
+        max_proteins = opt_int(max_proteins, 100),
+        include      = opt_char_vec(include),
+        order_in     = opt_char_vec(order_in)
       )
 
       style <- peaks_plot_style(
@@ -806,7 +827,7 @@ function(req, bed_upload_id = NULL, bed_source = NULL, mats_upload_id = NULL,
          p_valueRetainedAndExclusion = NULL, p_valueControls = NULL,
          retained_IncLevelDifference = NULL, exclusion_IncLevelDifference = NULL,
          Min_Count = NULL, groups = NULL, control_multiplier = NULL, control_iterations = NULL,
-         fdr_threshold = NULL,
+         fdr_threshold = NULL, stat_test = NULL, psi_control_max = NULL,
          title = NULL, retained_col = NULL, excluded_col = NULL, control_col = NULL,
          exon_col = NULL, line_width = NULL, axis_text_size = NULL, title_size = NULL) {
   log_info("splicing-map session=", req$session_id)
@@ -821,7 +842,8 @@ function(req, bed_upload_id = NULL, bed_source = NULL, mats_upload_id = NULL,
           WidthIntoExon, WidthIntoIntron, moving_average,
           p_valueRetainedAndExclusion, p_valueControls,
           retained_IncLevelDifference, exclusion_IncLevelDifference,
-          Min_Count, groups, control_multiplier, control_iterations, fdr_threshold
+          Min_Count, groups, control_multiplier, control_iterations, fdr_threshold,
+          stat_test, psi_control_max
         ),
         style = build_splicing_style(
           retained_col, excluded_col, control_col, exon_col,
@@ -829,7 +851,9 @@ function(req, bed_upload_id = NULL, bed_source = NULL, mats_upload_id = NULL,
         ),
         title = opt_str(title, "")
       )
-      print(plot)
+      # Splicing/sequence map entry points return list(plot, data); the PNG
+      # serializer needs the ggplot itself, so pull it out before printing.
+      print(plot$plot)
     },
     error = function(e) {
       msg <- conditionMessage(e)
@@ -850,7 +874,7 @@ function(req, mats_upload_id = NULL, sequence, genome = "hg38",
          p_valueRetainedAndExclusion = NULL, p_valueControls = NULL,
          retained_IncLevelDifference = NULL, exclusion_IncLevelDifference = NULL,
          Min_Count = NULL, groups = NULL, control_multiplier = NULL, control_iterations = NULL,
-         fdr_threshold = NULL,
+         fdr_threshold = NULL, stat_test = NULL, psi_control_max = NULL,
          title = NULL, retained_col = NULL, excluded_col = NULL, control_col = NULL,
          exon_col = NULL, line_width = NULL, axis_text_size = NULL, title_size = NULL) {
   log_info("sequence-map session=", req$session_id, " sequence=", sequence, " motif_mode=", motif_mode)
@@ -867,7 +891,8 @@ function(req, mats_upload_id = NULL, sequence, genome = "hg38",
           WidthIntoExon, WidthIntoIntron, moving_average,
           p_valueRetainedAndExclusion, p_valueControls,
           retained_IncLevelDifference, exclusion_IncLevelDifference,
-          Min_Count, groups, control_multiplier, control_iterations, fdr_threshold
+          Min_Count, groups, control_multiplier, control_iterations, fdr_threshold,
+          stat_test, psi_control_max
         ),
         style = build_splicing_style(
           retained_col, excluded_col, control_col, exon_col,
@@ -875,7 +900,9 @@ function(req, mats_upload_id = NULL, sequence, genome = "hg38",
         ),
         title = opt_str(title, "")
       )
-      print(plot)
+      # Splicing/sequence map entry points return list(plot, data); the PNG
+      # serializer needs the ggplot itself, so pull it out before printing.
+      print(plot$plot)
     },
     error = function(e) {
       msg <- conditionMessage(e)
@@ -895,7 +922,7 @@ function(req, bed_upload_id = NULL, bed_source = NULL, mats_upload_id = NULL,
          p_valueRetainedAndExclusion = NULL, p_valueControls = NULL,
          retained_IncLevelDifference = NULL, exclusion_IncLevelDifference = NULL,
          Min_Count = NULL, groups = NULL, control_multiplier = NULL, control_iterations = NULL,
-         fdr_threshold = NULL,
+         fdr_threshold = NULL, stat_test = NULL, psi_control_max = NULL,
          title = NULL, retained_col = NULL, excluded_col = NULL, control_col = NULL,
          exon_col = NULL, line_width = NULL, axis_text_size = NULL, title_size = NULL) {
   log_info("ri-splicing-map session=", req$session_id)
@@ -910,7 +937,8 @@ function(req, bed_upload_id = NULL, bed_source = NULL, mats_upload_id = NULL,
           WidthIntoExon, WidthIntoIntron, moving_average,
           p_valueRetainedAndExclusion, p_valueControls,
           retained_IncLevelDifference, exclusion_IncLevelDifference,
-          Min_Count, groups, control_multiplier, control_iterations, fdr_threshold
+          Min_Count, groups, control_multiplier, control_iterations, fdr_threshold,
+          stat_test, psi_control_max
         ),
         style = build_splicing_style(
           retained_col, excluded_col, control_col, exon_col,
@@ -918,7 +946,9 @@ function(req, bed_upload_id = NULL, bed_source = NULL, mats_upload_id = NULL,
         ),
         title = opt_str(title, "")
       )
-      print(plot)
+      # Splicing/sequence map entry points return list(plot, data); the PNG
+      # serializer needs the ggplot itself, so pull it out before printing.
+      print(plot$plot)
     },
     error = function(e) {
       msg <- conditionMessage(e)
@@ -939,7 +969,7 @@ function(req, mats_upload_id = NULL, sequence, genome = "hg38",
          p_valueRetainedAndExclusion = NULL, p_valueControls = NULL,
          retained_IncLevelDifference = NULL, exclusion_IncLevelDifference = NULL,
          Min_Count = NULL, groups = NULL, control_multiplier = NULL, control_iterations = NULL,
-         fdr_threshold = NULL,
+         fdr_threshold = NULL, stat_test = NULL, psi_control_max = NULL,
          title = NULL, retained_col = NULL, excluded_col = NULL, control_col = NULL,
          exon_col = NULL, line_width = NULL, axis_text_size = NULL, title_size = NULL) {
   log_info("ri-sequence-map session=", req$session_id, " sequence=", sequence, " motif_mode=", motif_mode)
@@ -956,7 +986,8 @@ function(req, mats_upload_id = NULL, sequence, genome = "hg38",
           WidthIntoExon, WidthIntoIntron, moving_average,
           p_valueRetainedAndExclusion, p_valueControls,
           retained_IncLevelDifference, exclusion_IncLevelDifference,
-          Min_Count, groups, control_multiplier, control_iterations, fdr_threshold
+          Min_Count, groups, control_multiplier, control_iterations, fdr_threshold,
+          stat_test, psi_control_max
         ),
         style = build_splicing_style(
           retained_col, excluded_col, control_col, exon_col,
@@ -964,7 +995,9 @@ function(req, mats_upload_id = NULL, sequence, genome = "hg38",
         ),
         title = opt_str(title, "")
       )
-      print(plot)
+      # Splicing/sequence map entry points return list(plot, data); the PNG
+      # serializer needs the ggplot itself, so pull it out before printing.
+      print(plot$plot)
     },
     error = function(e) {
       msg <- conditionMessage(e)
@@ -984,7 +1017,7 @@ function(req, bed_upload_id = NULL, bed_source = NULL, mats_upload_id = NULL,
          p_valueRetainedAndExclusion = NULL, p_valueControls = NULL,
          retained_IncLevelDifference = NULL, exclusion_IncLevelDifference = NULL,
          Min_Count = NULL, groups = NULL, control_multiplier = NULL, control_iterations = NULL,
-         fdr_threshold = NULL,
+         fdr_threshold = NULL, stat_test = NULL, psi_control_max = NULL,
          title = NULL, retained_col = NULL, excluded_col = NULL, control_col = NULL,
          exon_col = NULL, line_width = NULL, axis_text_size = NULL, title_size = NULL) {
   log_info("a5ss-splicing-map session=", req$session_id)
@@ -999,7 +1032,8 @@ function(req, bed_upload_id = NULL, bed_source = NULL, mats_upload_id = NULL,
           WidthIntoExon, WidthIntoIntron, moving_average,
           p_valueRetainedAndExclusion, p_valueControls,
           retained_IncLevelDifference, exclusion_IncLevelDifference,
-          Min_Count, groups, control_multiplier, control_iterations, fdr_threshold
+          Min_Count, groups, control_multiplier, control_iterations, fdr_threshold,
+          stat_test, psi_control_max
         ),
         style = build_splicing_style(
           retained_col, excluded_col, control_col, exon_col,
@@ -1007,7 +1041,9 @@ function(req, bed_upload_id = NULL, bed_source = NULL, mats_upload_id = NULL,
         ),
         title = opt_str(title, "")
       )
-      print(plot)
+      # Splicing/sequence map entry points return list(plot, data); the PNG
+      # serializer needs the ggplot itself, so pull it out before printing.
+      print(plot$plot)
     },
     error = function(e) {
       msg <- conditionMessage(e)
@@ -1028,7 +1064,7 @@ function(req, mats_upload_id = NULL, sequence, genome = "hg38",
          p_valueRetainedAndExclusion = NULL, p_valueControls = NULL,
          retained_IncLevelDifference = NULL, exclusion_IncLevelDifference = NULL,
          Min_Count = NULL, groups = NULL, control_multiplier = NULL, control_iterations = NULL,
-         fdr_threshold = NULL,
+         fdr_threshold = NULL, stat_test = NULL, psi_control_max = NULL,
          title = NULL, retained_col = NULL, excluded_col = NULL, control_col = NULL,
          exon_col = NULL, line_width = NULL, axis_text_size = NULL, title_size = NULL) {
   log_info("a5ss-sequence-map session=", req$session_id, " sequence=", sequence, " motif_mode=", motif_mode)
@@ -1045,7 +1081,8 @@ function(req, mats_upload_id = NULL, sequence, genome = "hg38",
           WidthIntoExon, WidthIntoIntron, moving_average,
           p_valueRetainedAndExclusion, p_valueControls,
           retained_IncLevelDifference, exclusion_IncLevelDifference,
-          Min_Count, groups, control_multiplier, control_iterations, fdr_threshold
+          Min_Count, groups, control_multiplier, control_iterations, fdr_threshold,
+          stat_test, psi_control_max
         ),
         style = build_splicing_style(
           retained_col, excluded_col, control_col, exon_col,
@@ -1053,7 +1090,9 @@ function(req, mats_upload_id = NULL, sequence, genome = "hg38",
         ),
         title = opt_str(title, "")
       )
-      print(plot)
+      # Splicing/sequence map entry points return list(plot, data); the PNG
+      # serializer needs the ggplot itself, so pull it out before printing.
+      print(plot$plot)
     },
     error = function(e) {
       msg <- conditionMessage(e)
@@ -1073,7 +1112,7 @@ function(req, bed_upload_id = NULL, bed_source = NULL, mats_upload_id = NULL,
          p_valueRetainedAndExclusion = NULL, p_valueControls = NULL,
          retained_IncLevelDifference = NULL, exclusion_IncLevelDifference = NULL,
          Min_Count = NULL, groups = NULL, control_multiplier = NULL, control_iterations = NULL,
-         fdr_threshold = NULL,
+         fdr_threshold = NULL, stat_test = NULL, psi_control_max = NULL,
          title = NULL, retained_col = NULL, excluded_col = NULL, control_col = NULL,
          exon_col = NULL, line_width = NULL, axis_text_size = NULL, title_size = NULL) {
   log_info("a3ss-splicing-map session=", req$session_id)
@@ -1088,7 +1127,8 @@ function(req, bed_upload_id = NULL, bed_source = NULL, mats_upload_id = NULL,
           WidthIntoExon, WidthIntoIntron, moving_average,
           p_valueRetainedAndExclusion, p_valueControls,
           retained_IncLevelDifference, exclusion_IncLevelDifference,
-          Min_Count, groups, control_multiplier, control_iterations, fdr_threshold
+          Min_Count, groups, control_multiplier, control_iterations, fdr_threshold,
+          stat_test, psi_control_max
         ),
         style = build_splicing_style(
           retained_col, excluded_col, control_col, exon_col,
@@ -1096,7 +1136,9 @@ function(req, bed_upload_id = NULL, bed_source = NULL, mats_upload_id = NULL,
         ),
         title = opt_str(title, "")
       )
-      print(plot)
+      # Splicing/sequence map entry points return list(plot, data); the PNG
+      # serializer needs the ggplot itself, so pull it out before printing.
+      print(plot$plot)
     },
     error = function(e) {
       msg <- conditionMessage(e)
@@ -1117,7 +1159,7 @@ function(req, mats_upload_id = NULL, sequence, genome = "hg38",
          p_valueRetainedAndExclusion = NULL, p_valueControls = NULL,
          retained_IncLevelDifference = NULL, exclusion_IncLevelDifference = NULL,
          Min_Count = NULL, groups = NULL, control_multiplier = NULL, control_iterations = NULL,
-         fdr_threshold = NULL,
+         fdr_threshold = NULL, stat_test = NULL, psi_control_max = NULL,
          title = NULL, retained_col = NULL, excluded_col = NULL, control_col = NULL,
          exon_col = NULL, line_width = NULL, axis_text_size = NULL, title_size = NULL) {
   log_info("a3ss-sequence-map session=", req$session_id, " sequence=", sequence, " motif_mode=", motif_mode)
@@ -1134,7 +1176,8 @@ function(req, mats_upload_id = NULL, sequence, genome = "hg38",
           WidthIntoExon, WidthIntoIntron, moving_average,
           p_valueRetainedAndExclusion, p_valueControls,
           retained_IncLevelDifference, exclusion_IncLevelDifference,
-          Min_Count, groups, control_multiplier, control_iterations, fdr_threshold
+          Min_Count, groups, control_multiplier, control_iterations, fdr_threshold,
+          stat_test, psi_control_max
         ),
         style = build_splicing_style(
           retained_col, excluded_col, control_col, exon_col,
@@ -1142,7 +1185,9 @@ function(req, mats_upload_id = NULL, sequence, genome = "hg38",
         ),
         title = opt_str(title, "")
       )
-      print(plot)
+      # Splicing/sequence map entry points return list(plot, data); the PNG
+      # serializer needs the ggplot itself, so pull it out before printing.
+      print(plot$plot)
     },
     error = function(e) {
       msg <- conditionMessage(e)

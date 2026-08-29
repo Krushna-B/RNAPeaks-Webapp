@@ -75,7 +75,9 @@ function Field({
 const ALL_GROUPS = ["Positive", "Negative", "Control"] as const
 
 export function SplicingMapTab() {
-  const [bedSource, setBedSource] = useState<"K562" | "HepG2" | "upload">("K562")
+  const [bedSource, setBedSource] = useState<"K562" | "HepG2" | "upload">(
+    "K562"
+  )
   const [bedUploadId, setBedUploadId] = useState<string | null>(null)
   const [matsUploadId, setMatsUploadId] = useState<string | null>(null)
 
@@ -102,6 +104,8 @@ export function SplicingMapTab() {
 
   // Significance
   const [fdrThreshold, setFdrThreshold] = useState("0.05")
+  const [statTest, setStatTest] = useState("fisher-all")
+  const [psiControlMax, setPsiControlMax] = useState("0.005")
 
   // Appearance
   const [title, setTitle] = useState("")
@@ -145,6 +149,8 @@ export function SplicingMapTab() {
         controlMultiplier,
         controlIterations,
         fdrThreshold,
+        statTest,
+        psiControlMax,
         title,
         retainedCol,
         excludedCol,
@@ -162,7 +168,17 @@ export function SplicingMapTab() {
     }
   }
 
-  const canRun = groups.length > 0 && !loading
+  // psi_control_max must sit below both ΔΨ cutoffs, otherwise the Control
+  // pool overlaps Positive/Negative and the R backend rejects the request.
+  const psiCutoffFloor = Math.min(
+    Math.abs(parseFloat(retainedIncLevelDiff) || 0),
+    Math.abs(parseFloat(exclusionIncLevelDiff) || 0)
+  )
+  const psiControlMaxInvalid =
+    psiControlMax.trim() !== "" &&
+    (Number(psiControlMax) < 0 || Number(psiControlMax) >= psiCutoffFloor)
+
+  const canRun = groups.length > 0 && !psiControlMaxInvalid && !loading
 
   const retainedLabel = `ΔΨ > ${retainedIncLevelDiff}`
   const excludedLabel = `ΔΨ < ${exclusionIncLevelDiff}`
@@ -200,10 +216,16 @@ export function SplicingMapTab() {
             <p className="text-xs font-medium">BED File</p>
             <div className="flex gap-4">
               {(["K562", "HepG2"] as const).map((src) => (
-                <label key={src} className="flex cursor-pointer items-center gap-1.5">
+                <label
+                  key={src}
+                  className="flex cursor-pointer items-center gap-1.5"
+                >
                   <Checkbox
                     checked={bedSource === src}
-                    onCheckedChange={() => { setBedSource(src); setBedUploadId(null) }}
+                    onCheckedChange={() => {
+                      setBedSource(src)
+                      setBedUploadId(null)
+                    }}
                   />
                   <span className="text-sm">{src} (default)</span>
                 </label>
@@ -302,6 +324,22 @@ export function SplicingMapTab() {
             />
           </Field>
 
+          <Field label="Statistical Test">
+            <Select value={statTest} onValueChange={setStatTest}>
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="fisher-all">
+                  Fisher (all controls)
+                </SelectItem>
+                <SelectItem value="fisher-bootstrap">
+                  Fisher (bootstrap)
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+
           {/* CONTROL SAMPLING */}
           <SectionLabel>Control Sampling</SectionLabel>
 
@@ -375,6 +413,23 @@ export function SplicingMapTab() {
               />
             </Field>
           </div>
+
+          <Field label="Control Max |ΔΨ|" hint="Must be below both ΔΨ cutoffs">
+            <Input
+              type="number"
+              min="0"
+              step="any"
+              value={psiControlMax}
+              onChange={(e) => setPsiControlMax(e.target.value)}
+              className="h-8 text-sm"
+            />
+            {psiControlMaxInvalid && (
+              <p className="text-[11px] leading-snug text-destructive">
+                Must be less than {psiCutoffFloor} (smaller of the two ΔΨ
+                cutoffs).
+              </p>
+            )}
+          </Field>
 
           <Field label="Min Read Count">
             <Input

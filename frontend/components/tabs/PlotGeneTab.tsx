@@ -102,6 +102,8 @@ export function PlotGeneTab() {
   const [peakCol, setPeakCol] = useState("purple")
   const [merge, setMerge] = useState("0")
   const [maxTargets, setMaxTargets] = useState("")
+  const [include, setInclude] = useState("")
+  const [orderIn, setOrderIn] = useState("")
 
   // Appearance
   const [titleSize, setTitleSize] = useState("25")
@@ -166,6 +168,8 @@ export function PlotGeneTab() {
         species,
         peakCol,
         orderBy,
+        include,
+        orderIn,
         fiveToThree: fiveToThree ? "TRUE" : "FALSE",
         txID,
         merge,
@@ -319,6 +323,30 @@ export function PlotGeneTab() {
                 ))}
               </SelectContent>
             </Select>
+          </Field>
+
+          <Field
+            label="Include Proteins"
+            hint="Optional - comma-separated; keeps only these tracks"
+          >
+            <Input
+              placeholder="e.g. SF3B4, U2AF2"
+              value={include}
+              onChange={(e) => setInclude(e.target.value)}
+              className="h-8 text-sm"
+            />
+          </Field>
+
+          <Field
+            label="Track Order"
+            hint="Optional - comma-separated names; overrides Order By"
+          >
+            <Input
+              placeholder="e.g. U2AF2, SF3B4"
+              value={orderIn}
+              onChange={(e) => setOrderIn(e.target.value)}
+              className="h-8 text-sm"
+            />
           </Field>
 
           <div className="grid grid-cols-2 gap-3">

@@ -53,6 +53,46 @@ const STRUCTURE_COLOR_OPTIONS = [
   { value: "purple", label: "Purple" },
 ]
 
+type ParsedRegion = { chr: string; start: string; end: string }
+
+// Parse a single "chr:start-end" locus string into its parts. Tolerates
+// thousands separators and stray whitespace (e.g. "chr1 : 56,000,000 - 56,050,000")
+// so users can paste coordinates straight from a genome browser.
+function parseRegion(
+  input: string
+): { ok: true; value: ParsedRegion } | { ok: false; error: string } {
+  const cleaned = input.trim()
+  if (!cleaned) {
+    return {
+      ok: false,
+      error: "Enter a region, e.g. chr1:56,000,000-56,050,000",
+    }
+  }
+  const match = cleaned.match(/^([\w.]+)\s*:\s*([\d,\s]+?)\s*-\s*([\d,\s]+)$/)
+  if (!match) {
+    return {
+      ok: false,
+      error:
+        "Invalid format. Use chr:start-end, e.g. chr1:56,000,000-56,050,000",
+    }
+  }
+  const chr = match[1]
+  const start = match[2].replace(/[,\s]/g, "")
+  const end = match[3].replace(/[,\s]/g, "")
+  if (!start || !end) {
+    return { ok: false, error: "Both start and end positions are required." }
+  }
+  const s = Number(start)
+  const e = Number(end)
+  if (!Number.isInteger(s) || !Number.isInteger(e)) {
+    return { ok: false, error: "Start and end must be whole numbers." }
+  }
+  if (s >= e) {
+    return { ok: false, error: "Start must be less than end." }
+  }
+  return { ok: true, value: { chr, start, end } }
+}
+
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-2.5 pt-1">
@@ -103,9 +143,7 @@ export function PlotRegionTab() {
   const [bed, setBed] = useState<BedSelection>(EMPTY_BED_SELECTION)
   const [gtfUploadId, setGtfUploadId] = useState<string | null>(null)
   const [species, setSpecies] = useState("hg38")
-  const [chr, setChr] = useState("")
-  const [start, setStart] = useState("")
-  const [end, setEnd] = useState("")
+  const [region, setRegion] = useState("")
   const [strand, setStrand] = useState("+")
 
   // Peak options
@@ -113,6 +151,8 @@ export function PlotRegionTab() {
   const [peakCol, setPeakCol] = useState("purple")
   const [merge, setMerge] = useState("0")
   const [maxProteins, setMaxProteins] = useState("40")
+  const [include, setInclude] = useState("")
+  const [orderIn, setOrderIn] = useState("")
 
   // Target
   const [geneID, setGeneID] = useState("")
@@ -153,8 +193,14 @@ export function PlotRegionTab() {
     (e) => e.bamUploadId && e.baiUploadId
   ).length
 
+  const parsedRegion = parseRegion(region)
+
   async function handleRun() {
-    if (!chr || !start || !end) return
+    if (!parsedRegion.ok) {
+      setError(parsedRegion.error)
+      return
+    }
+    const { chr, start, end } = parsedRegion.value
     setLoading(true)
     setError(null)
     setImageUrl(null)
@@ -183,6 +229,8 @@ export function PlotRegionTab() {
         strand,
         peakCol,
         orderBy,
+        include,
+        orderIn,
         geneID,
         txID,
         merge,
@@ -219,7 +267,7 @@ export function PlotRegionTab() {
     }
   }
 
-  const canRun = !!chr && !!start && !!end && hasBed(bed) && !loading
+  const canRun = parsedRegion.ok && hasBed(bed) && !loading
 
   return (
     <div className="flex h-full">
@@ -290,35 +338,19 @@ export function PlotRegionTab() {
           {/* REGION */}
           <SectionLabel>Region</SectionLabel>
 
-          <Field label="Chromosome" required>
+          <Field label="Region" required hint="Format: chr:start-end">
             <Input
-              placeholder="e.g. chr1"
-              value={chr}
-              onChange={(e) => setChr(e.target.value)}
-              className="h-8 text-sm"
+              placeholder="e.g. chr1:56,000,000-56,050,000"
+              value={region}
+              onChange={(e) => setRegion(e.target.value)}
+              className="h-8 font-mono text-sm"
             />
+            {region.trim() !== "" && !parsedRegion.ok && (
+              <p className="text-[11px] leading-snug text-destructive">
+                {parsedRegion.error}
+              </p>
+            )}
           </Field>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Start (bp)" required>
-              <Input
-                type="number"
-                placeholder="56000000"
-                value={start}
-                onChange={(e) => setStart(e.target.value)}
-                className="h-8 text-sm"
-              />
-            </Field>
-            <Field label="End (bp)" required>
-              <Input
-                type="number"
-                placeholder="56050000"
-                value={end}
-                onChange={(e) => setEnd(e.target.value)}
-                className="h-8 text-sm"
-              />
-            </Field>
-          </div>
 
           <Field label="Strand">
             <Select value={strand} onValueChange={setStrand}>
@@ -387,6 +419,30 @@ export function PlotRegionTab() {
                 ))}
               </SelectContent>
             </Select>
+          </Field>
+
+          <Field
+            label="Include Proteins"
+            hint="Optional - comma-separated; keeps only these tracks"
+          >
+            <Input
+              placeholder="e.g. SF3B4, U2AF2"
+              value={include}
+              onChange={(e) => setInclude(e.target.value)}
+              className="h-8 text-sm"
+            />
+          </Field>
+
+          <Field
+            label="Track Order"
+            hint="Optional - comma-separated names; overrides Order By"
+          >
+            <Input
+              placeholder="e.g. U2AF2, SF3B4"
+              value={orderIn}
+              onChange={(e) => setOrderIn(e.target.value)}
+              className="h-8 text-sm"
+            />
           </Field>
 
           <div className="grid grid-cols-2 gap-3">
