@@ -30,7 +30,6 @@ const LINE_COLOR_OPTIONS = [
   { value: "gray40", label: "Gray" },
 ]
 
-
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-2.5 pt-1">
@@ -131,6 +130,8 @@ export function RISequenceMapTab() {
 
   // Significance
   const [fdrThreshold, setFdrThreshold] = useState("0.05")
+  const [statTest, setStatTest] = useState("fisher-all")
+  const [psiControlMax, setPsiControlMax] = useState("0.005")
 
   // Appearance
   const [title, setTitle] = useState("")
@@ -183,6 +184,8 @@ export function RISequenceMapTab() {
       controlMultiplier,
       controlIterations,
       fdrThreshold,
+      statTest,
+      psiControlMax,
       title,
       retainedCol,
       excludedCol,
@@ -233,7 +236,21 @@ export function RISequenceMapTab() {
     .split(",")
     .map((m) => m.trim())
     .filter(Boolean)
-  const canRun = parsedMotifs.length > 0 && groups.length > 0 && !loading
+  // psi_control_max must sit below both ΔΨ cutoffs, otherwise the Control
+  // pool overlaps Positive/Negative and the R backend rejects the request.
+  const psiCutoffFloor = Math.min(
+    Math.abs(parseFloat(retainedIncLevelDiff) || 0),
+    Math.abs(parseFloat(exclusionIncLevelDiff) || 0)
+  )
+  const psiControlMaxInvalid =
+    psiControlMax.trim() !== "" &&
+    (Number(psiControlMax) < 0 || Number(psiControlMax) >= psiCutoffFloor)
+
+  const canRun =
+    parsedMotifs.length > 0 &&
+    groups.length > 0 &&
+    !psiControlMaxInvalid &&
+    !loading
 
   const showCarousel =
     motifMode === "individual" &&
@@ -254,7 +271,9 @@ export function RISequenceMapTab() {
       >
         {/* Header */}
         <div className="border-b px-5 py-3.5">
-          <p className="text-sm font-semibold tracking-tight">RI Sequence Map</p>
+          <p className="text-sm font-semibold tracking-tight">
+            RI Sequence Map
+          </p>
           <p className="mt-0.5 text-xs text-muted-foreground">
             Motif density around retained intron events
           </p>
@@ -391,6 +410,22 @@ export function RISequenceMapTab() {
             />
           </Field>
 
+          <Field label="Statistical Test">
+            <Select value={statTest} onValueChange={setStatTest}>
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="fisher-all">
+                  Fisher (all controls)
+                </SelectItem>
+                <SelectItem value="fisher-bootstrap">
+                  Fisher (bootstrap)
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+
           {/* CONTROL SAMPLING */}
           <SectionLabel>Control Sampling</SectionLabel>
 
@@ -464,6 +499,23 @@ export function RISequenceMapTab() {
               />
             </Field>
           </div>
+
+          <Field label="Control Max |ΔΨ|" hint="Must be below both ΔΨ cutoffs">
+            <Input
+              type="number"
+              min="0"
+              step="any"
+              value={psiControlMax}
+              onChange={(e) => setPsiControlMax(e.target.value)}
+              className="h-8 text-sm"
+            />
+            {psiControlMaxInvalid && (
+              <p className="text-[11px] leading-snug text-destructive">
+                Must be less than {psiCutoffFloor} (smaller of the two ΔΨ
+                cutoffs).
+              </p>
+            )}
+          </Field>
 
           <Field label="Min Read Count">
             <Input

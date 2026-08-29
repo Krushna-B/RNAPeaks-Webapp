@@ -85,6 +85,8 @@ export interface PlotGeneParams {
   peakCol: string
   orderBy: string
   fiveToThree: string
+  include?: string // comma-separated track names to keep (blank = all)
+  orderIn?: string // comma-separated explicit track order (overrides orderBy)
   txID?: string
   merge?: string
   totalArrows?: string
@@ -122,6 +124,8 @@ export async function runPlotGene(params: PlotGeneParams): Promise<string> {
     peak_col: params.peakCol,
     order_by: params.orderBy,
     five_to_three: params.fiveToThree,
+    include: params.include ?? "",
+    order_in: params.orderIn ?? "",
     TxID: params.txID ?? "",
     merge: params.merge ?? "",
     total_arrows: params.totalArrows ?? "",
@@ -163,6 +167,8 @@ export interface PlotRegionParams {
   peakCol: string
   orderBy: string
   // Advanced
+  include?: string // comma-separated track names to keep (blank = all)
+  orderIn?: string // comma-separated explicit track order (overrides orderBy)
   geneID?: string
   txID?: string
   merge?: string
@@ -206,6 +212,8 @@ export async function runPlotRegion(params: PlotRegionParams): Promise<string> {
     Strand: params.strand,
     peak_col: params.peakCol,
     order_by: params.orderBy,
+    include: params.include ?? "",
+    order_in: params.orderIn ?? "",
     geneID: params.geneID ?? "",
     TxID: params.txID ?? "",
     merge: params.merge ?? "",
@@ -248,6 +256,8 @@ export interface MapAdvancedParams {
   controlMultiplier?: string
   controlIterations?: string
   fdrThreshold?: string
+  statTest?: string // "fisher-all" | "fisher-bootstrap"
+  psiControlMax?: string // max |ΔΨ| for an event to qualify as Control
   title?: string
   retainedCol?: string
   excludedCol?: string
@@ -269,6 +279,8 @@ function mapAdvancedToRecord(a: MapAdvancedParams): Record<string, string> {
     control_multiplier: a.controlMultiplier ?? "",
     control_iterations: a.controlIterations ?? "",
     fdr_threshold: a.fdrThreshold ?? "",
+    stat_test: a.statTest ?? "",
+    psi_control_max: a.psiControlMax ?? "",
     title: a.title ?? "",
     retained_col: a.retainedCol ?? "",
     excluded_col: a.excludedCol ?? "",

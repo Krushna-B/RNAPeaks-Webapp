@@ -63,13 +63,17 @@ function parseRegion(
 ): { ok: true; value: ParsedRegion } | { ok: false; error: string } {
   const cleaned = input.trim()
   if (!cleaned) {
-    return { ok: false, error: "Enter a region, e.g. chr1:56,000,000-56,050,000" }
+    return {
+      ok: false,
+      error: "Enter a region, e.g. chr1:56,000,000-56,050,000",
+    }
   }
   const match = cleaned.match(/^([\w.]+)\s*:\s*([\d,\s]+?)\s*-\s*([\d,\s]+)$/)
   if (!match) {
     return {
       ok: false,
-      error: "Invalid format. Use chr:start-end, e.g. chr1:56,000,000-56,050,000",
+      error:
+        "Invalid format. Use chr:start-end, e.g. chr1:56,000,000-56,050,000",
     }
   }
   const chr = match[1]
@@ -147,6 +151,8 @@ export function PlotRegionTab() {
   const [peakCol, setPeakCol] = useState("purple")
   const [merge, setMerge] = useState("0")
   const [maxProteins, setMaxProteins] = useState("40")
+  const [include, setInclude] = useState("")
+  const [orderIn, setOrderIn] = useState("")
 
   // Target
   const [geneID, setGeneID] = useState("")
@@ -223,6 +229,8 @@ export function PlotRegionTab() {
         strand,
         peakCol,
         orderBy,
+        include,
+        orderIn,
         geneID,
         txID,
         merge,
@@ -330,11 +338,7 @@ export function PlotRegionTab() {
           {/* REGION */}
           <SectionLabel>Region</SectionLabel>
 
-          <Field
-            label="Region"
-            required
-            hint="Format: chr:start-end"
-          >
+          <Field label="Region" required hint="Format: chr:start-end">
             <Input
               placeholder="e.g. chr1:56,000,000-56,050,000"
               value={region}
@@ -415,6 +419,30 @@ export function PlotRegionTab() {
                 ))}
               </SelectContent>
             </Select>
+          </Field>
+
+          <Field
+            label="Include Proteins"
+            hint="Optional - comma-separated; keeps only these tracks"
+          >
+            <Input
+              placeholder="e.g. SF3B4, U2AF2"
+              value={include}
+              onChange={(e) => setInclude(e.target.value)}
+              className="h-8 text-sm"
+            />
+          </Field>
+
+          <Field
+            label="Track Order"
+            hint="Optional - comma-separated names; overrides Order By"
+          >
+            <Input
+              placeholder="e.g. U2AF2, SF3B4"
+              value={orderIn}
+              onChange={(e) => setOrderIn(e.target.value)}
+              className="h-8 text-sm"
+            />
           </Field>
 
           <div className="grid grid-cols-2 gap-3">
