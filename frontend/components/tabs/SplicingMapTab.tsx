@@ -75,9 +75,6 @@ function Field({
 const ALL_GROUPS = ["Positive", "Negative", "Control"] as const
 
 export function SplicingMapTab() {
-  const [bedSource, setBedSource] = useState<"K562" | "HepG2" | "upload">(
-    "K562"
-  )
   const [bedUploadId, setBedUploadId] = useState<string | null>(null)
   const [matsUploadId, setMatsUploadId] = useState<string | null>(null)
 
@@ -134,8 +131,7 @@ export function SplicingMapTab() {
     setImageUrl(null)
     try {
       const url = await runSplicingMap({
-        bedUploadId: bedSource === "upload" ? (bedUploadId ?? "") : "",
-        bedSource: bedSource !== "upload" ? bedSource : undefined,
+        bedUploadId: bedUploadId ?? "",
         matsUploadId: matsUploadId ?? "",
         widthIntoExon,
         widthIntoIntron,
@@ -178,7 +174,8 @@ export function SplicingMapTab() {
     psiControlMax.trim() !== "" &&
     (Number(psiControlMax) < 0 || Number(psiControlMax) >= psiCutoffFloor)
 
-  const canRun = groups.length > 0 && !psiControlMaxInvalid && !loading
+  const canRun =
+    groups.length > 0 && !!bedUploadId && !psiControlMaxInvalid && !loading
 
   const retainedLabel = `ΔΨ > ${retainedIncLevelDiff}`
   const excludedLabel = `ΔΨ < ${exclusionIncLevelDiff}`
@@ -214,38 +211,12 @@ export function SplicingMapTab() {
 
           <div className="space-y-2">
             <p className="text-xs font-medium">BED File</p>
-            <div className="flex gap-4">
-              {(["K562", "HepG2"] as const).map((src) => (
-                <label
-                  key={src}
-                  className="flex cursor-pointer items-center gap-1.5"
-                >
-                  <Checkbox
-                    checked={bedSource === src}
-                    onCheckedChange={() => {
-                      setBedSource(src)
-                      setBedUploadId(null)
-                    }}
-                  />
-                  <span className="text-sm">{src} (default)</span>
-                </label>
-              ))}
-              <label className="flex cursor-pointer items-center gap-1.5">
-                <Checkbox
-                  checked={bedSource === "upload"}
-                  onCheckedChange={() => setBedSource("upload")}
-                />
-                <span className="text-sm">Upload own</span>
-              </label>
-            </div>
-            {bedSource === "upload" && (
-              <FileUpload
-                label=""
-                accept=".bed"
-                onUploadComplete={(id) => setBedUploadId(id)}
-                onClear={() => setBedUploadId(null)}
-              />
-            )}
+            <FileUpload
+              label=""
+              accept=".bed"
+              onUploadComplete={(id) => setBedUploadId(id)}
+              onClear={() => setBedUploadId(null)}
+            />
           </div>
 
           <FileUpload
